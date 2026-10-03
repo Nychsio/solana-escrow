@@ -6,7 +6,7 @@ Escrow dla zleceń freelancerskich **bez arbitra**, na Solanie (Anchor). Warunki
 
 Zaimplementowana pełna logika escrow: `create`, `mark_delivered`, `release`, `claim_if_silent`, `refund_if_late`, `reject` oraz rozstrzyganie sporów bez arbitra: `propose_settlement`, `accept_settlement`, `burn_if_unsettled`, oraz `close_escrow` (odzyskanie rentu).
 
-Program jest wdrożony na devnecie (wersja z decay i `close_escrow`). Jeszcze nie zrobione: frontend, odebranie upgrade authority.
+Program jest wdrożony na devnecie (wersja z decay i `close_escrow`). Frontend (`app/`) działa na devnecie. Jeszcze nie zrobione: odebranie upgrade authority.
 
 ## Devnet
 
@@ -89,11 +89,11 @@ yarn app:dev          # http://localhost:5173
 yarn app:build        # statyczny build w app/dist
 ```
 
-RPC: domyślnie `https://api.devnet.solana.com`, można nadpisać przez `VITE_RPC_URL` (`app/.env`, wzór w `app/.env.example`).
+Uruchomienie: `yarn app:install`, potem plik `app/.env` z adresem RPC devnetu (`VITE_RPC_URL=...`, wzór w `app/.env.example`; bez niego aplikacja używa `https://api.devnet.solana.com`, który bywa ograniczany limitami), na końcu `yarn app:dev`.
 
 Demo dwoma portfelami:
 1. `yarn demo:setup` (SOL + tokeny testowe), potem `yarn demo:keys` wypisuje w terminalu klucze klienta i wykonawcy w base58. Wynik tylko do importu w Phantomie, nie zapisywać.
-2. Phantom: Ustawienia → Developer settings → Testnet mode → Solana Devnet. Zaimportuj oba klucze jako osobne konta (albo dwa profile przeglądarki).
+2. Phantom: Ustawienia → Developer settings → włącz Testnet mode → wybierz sieć **Solana Testnet** (nie Devnet). Phantom tylko podpisuje i pokazuje 0 SOL, to normalne: transakcje wysyła aplikacja przez RPC devnetu z `app/.env`. Dlaczego tak: na sieci Devnet okno Phantoma ładowało się ponad 90 s (jego własny RPC), blockhash wygasał i transakcja nie przechodziła. Zaimportuj oba klucze jako osobne konta (albo dwa profile przeglądarki).
 3. Klient: „Nowa umowa” → adres wykonawcy, kwota, termin, okna (preset 2 min do demo). Link `#/escrow/<PDA>` wysyłasz wykonawcy.
 4. Ekran umowy pokazuje tylko akcje dostępne dla roli, stanu i czasu; rozstrzyga zegar on-chain. Każda transakcja kończy się toastem z linkiem do Explorera, a historia umowy pochodzi z `getSignaturesForAddress`.
 
