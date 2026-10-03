@@ -4,7 +4,11 @@
     "lint:fix": "prettier */*.js \"*/**/*{.js,.ts}\" -w",
     "lint": "prettier */*.js \"*/**/*{.js,.ts}\" --check",
     "demo:setup": "ts-node -P scripts/tsconfig.json scripts/demo-setup.ts",
-    "demo:flow": "ts-node -P scripts/tsconfig.json scripts/demo-flow.ts"
+    "demo:flow": "ts-node -P scripts/tsconfig.json scripts/demo-flow.ts",
+    "demo:keys": "ts-node -P scripts/tsconfig.json scripts/export-keys.ts",
+    "app:install": "yarn --cwd app install",
+    "app:dev": "yarn --cwd app dev",
+    "app:build": "yarn --cwd app build"
   },
   "dependencies": {
     "@anchor-lang/core": "1.1.2"

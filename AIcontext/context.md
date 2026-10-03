@@ -8,15 +8,18 @@
 - Repo publiczne: https://github.com/Nychsio/solana-escrow
 - Deploy na devnet (2026-10-03): program `6KsiGDi8o9E1qNWxpzdew2CkDyQFqfeoLs79fAJ457D8`, https://explorer.solana.com/address/6KsiGDi8o9E1qNWxpzdew2CkDyQFqfeoLs79fAJ457D8?cluster=devnet; skrypty demo (`yarn demo:setup`, `yarn demo:flow`) przeszły, 3 transakcje finalized (linki w README)
 
+- Zadanie 4 (kod): frontend `app/` (Vite + React + TS + Wallet Adapter + @anchor-lang/core 1.1.2): lista umów (memcmp 8/40), nowa umowa, szczegóły `#/escrow/<PDA>`, wszystkie akcje wg macierzy z front.md (release, claim_if_silent, refund_if_late, reject, propose/accept_settlement, burn_if_unsettled), hash SHA-256 pliku + weryfikacja, toasty z Explorerem, błędy programu po polsku. `scripts/export-keys.ts` (`yarn demo:keys`).
+- Weryfikacja bez devnetu (sandbox nie ma dostępu do RPC devnetu): `tsc` + `vite build` czyste; test w headless Chromium z atrapą RPC i portfela: dekodowanie konta, macierz przycisków dla 9 przypadków, transakcje create/refund/accept podpisane i wysłane (kolejność kont i dyskryminatory zgodne z IDL, ATA idempotent przed wypłatą), tłumaczenie błędu `InvalidState`.
+
 ## W toku
-- brak
+- Zadanie 4: przeklikanie 3 ścieżek na devnecie dwoma Phantomami (kryterium ukończenia) — robi Piotr lokalnie
 
 ## Następne
 - Frontend, potem code freeze i odebranie upgrade authority
 - Decyzja o wariancie decay w sporze (patrz sekcja Research)
 
 ## Blokery
-- brak
+- `anchor build` / `anchor test` po zadaniu 4 nieuruchomione przez Claude (brak toolchaina w sandboxie); `programs/` i `tests/` bez zmian.
 
 ## Devnet: portfel i upgrade authority
 - Portfel deweloperski `2uKvpTL9ErJLNaL1HYa3oMfFBECNZQVQDpqqdUySKx3a` = upgrade authority programu (NIE odebrane, do code freeze). Klucz w `~/.config/solana/id.json`, poza gitem.
@@ -41,4 +44,4 @@
 - Dual-deposit odrzucony czasowo: zmienia `create` i flow demo.
 - DECYZJA OTWARTA: CEL bez zmian vs CEL + decay. Po decyzji dopisać do decisions.md.
 - Nie wstawiać do README/prezentacji: Haggle Protocol, Synmerco, Octasol, Agent Arena (podane przez Gemini bez linków, niezweryfikowane).
-
+- Pełny research i weryfikacja źródeł: `AIcontext/research-dispute.md`.

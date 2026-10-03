@@ -31,7 +31,8 @@ Powtórzenie demo na devnecie: `yarn demo:setup` (portfele i mint w `.demo-keys/
 | `programs/escrow/src/instructions/delivery.rs` | `mark_delivered`, `reject` |
 | `programs/escrow/src/instructions/dispute.rs` | `propose_settlement`, `accept_settlement`, `burn_if_unsettled` |
 | `programs/escrow/src/instructions/payout.rs` | `release`, `claim_if_silent`, `refund_if_late` oraz `pay_from_vault` (jedyna funkcja wypłacająca ze skarbca) |
-| `scripts/` | Skrypty demo na devnecie: `demo-setup.ts` (portfele, mint, tokeny), `demo-flow.ts` (create → mark_delivered → release) |
+| `scripts/` | Skrypty demo na devnecie: `demo-setup.ts` (portfele, mint, tokeny), `demo-flow.ts` (create → mark_delivered → release), `export-keys.ts` (klucze demo w base58 do Phantoma, tylko terminal) |
+| `app/` | Frontend (Vite + React + TS + Wallet Adapter): czyta konta z chaina i buduje transakcje, bez backendu |
 | `tests/escrow.ts` | Testy wszystkich ścieżek na localnecie |
 | `Anchor.toml` | Konfiguracja workspace'u Anchor (klaster, portfel, skrypt testowy) |
 | `migrations/deploy.ts` | Szablonowy skrypt deployu z `anchor init` (pusty) |
@@ -69,6 +70,26 @@ yarn install
 anchor build
 anchor test
 ```
+
+## Frontend (app/)
+
+Statyczna aplikacja w przeglądarce. Nie ma backendu ani bazy: stan umowy czyta z konta `Escrow` na devnecie, a każdą zmianę wykonuje transakcja podpisana w portfelu i sprawdzona przez program.
+
+```
+yarn app:install
+yarn app:dev          # http://localhost:5173
+yarn app:build        # statyczny build w app/dist
+```
+
+RPC: domyślnie `https://api.devnet.solana.com`, można nadpisać przez `VITE_RPC_URL` (`app/.env`, wzór w `app/.env.example`).
+
+Demo dwoma portfelami:
+1. `yarn demo:setup` (SOL + tokeny testowe), potem `yarn demo:keys` wypisuje w terminalu klucze klienta i wykonawcy w base58. Wynik tylko do importu w Phantomie, nie zapisywać.
+2. Phantom: Ustawienia → Developer settings → Testnet mode → Solana Devnet. Zaimportuj oba klucze jako osobne konta (albo dwa profile przeglądarki).
+3. Klient: „Nowa umowa” → adres wykonawcy, kwota, termin, okna (preset 2 min do demo). Link `#/escrow/<PDA>` wysyłasz wykonawcy.
+4. Ekran umowy pokazuje tylko akcje dostępne dla roli, stanu i czasu; rozstrzyga zegar on-chain. Każda transakcja kończy się toastem z linkiem do Explorera, a historia umowy pochodzi z `getSignaturesForAddress`.
+
+Hash dostawy: przeglądarka liczy SHA-256 pliku (Web Crypto), plik nie opuszcza komputera. Klient wrzuca otrzymany plik i widzi ✅/❌ zgodności z hashem zapisanym on-chain.
 
 ## Użyte komponenty zewnętrzne
 

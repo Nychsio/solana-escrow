@@ -25,6 +25,17 @@ Format: `data | decyzja | dlaczego | kto`
 2026-10-03 | Skrypty demo w scripts/ uruchamiane przez ts-node z osobnym scripts/tsconfig.json (ES2020) | BigInt i nowsze API; główny tsconfig (ES6) obsługuje testy | Claude Code
 2026-10-03 | Portfele demo i mint w .demo-keys/ (poza gitem), setup idempotentny | powtarzalne demo bez kluczy w repo | Piotr
 
+2026-10-03 | Frontend: Vite 8 + React 19 + TypeScript 5.7 w app/ (osobny package.json/yarn.lock), build statyczny | zero backendu, hosting dowolny | Piotr
+2026-10-03 | Portfele przez @solana/wallet-adapter-react (+ -react-ui, -base) z pustą listą adapterów; Phantom i Solflare wykrywane przez Wallet Standard | bez pakietu -wallets (dziesiątki zależności) | Claude Code
+2026-10-03 | Klient programu: @anchor-lang/core 1.1.2 z IDL target/idl (kopia w app/src/idl), accountsPartial z jawnymi kontami | ta sama wersja co program i testy | Claude Code
+2026-10-03 | Polyfill Buffer z pakietu `buffer` (już zależność web3.js), `global` = globalThis w vite.config | Anchor i spl-token oczekują API Node | Claude Code
+2026-10-03 | Routing na hashu (#/escrow/<PDA>) bez biblioteki routera | działa na każdym statycznym hostingu, mniej zależności | Claude Code
+2026-10-03 | Przyciski wg zegara on-chain szacowanego (getBlockTime - czas przeglądarki), rozstrzyga program | zegar devnetu odbiega od lokalnego | Claude Code
+2026-10-03 | Każda wypłata/ugoda ma w tej samej tx createAssociatedTokenAccountIdempotent dla odbiorcy (przy ugodzie obu stron) | program wymaga istniejącego konta tokenowego | Claude Code
+2026-10-03 | SHA-256 dostawy liczone w przeglądarce (Web Crypto), plik nie wychodzi z komputera | dowód „co dostarczono” bez pośrednika i bez przechowywania pliku | Piotr
+2026-10-03 | Historia umowy z getSignaturesForAddress + nazwa instrukcji z logów (getTransactions) | bez indeksera | Claude Code
+2026-10-03 | Klucze demo do Phantoma: scripts/export-keys.ts (yarn demo:keys), wynik tylko w terminalu | brak kluczy w repo i we froncie | Piotr
+
 ## Użyte komponenty zewnętrzne (disclosure)
 - Solana (devnet), Solana CLI
 - Anchor (anchor-lang, anchor-spl)
@@ -35,3 +46,5 @@ Format: `data | decyzja | dlaczego | kto`
 - Surfpool 1.6.0 (lokalny walidator uruchamiany przez `anchor test`)
 - Gemini (research mechanizmów sporu, bez generowania kodu)
 - ts-node (uruchamianie skryptów demo), Solana Explorer (linki do transakcji)
+- Frontend: Vite, React, TypeScript, @vitejs/plugin-react, @solana/wallet-adapter-base / -react / -react-ui, buffer, Web Crypto API (SHA-256), Phantom (portfel do demo)
+- Playwright + Chromium (lokalny test UI z atrapą RPC, poza repo)
