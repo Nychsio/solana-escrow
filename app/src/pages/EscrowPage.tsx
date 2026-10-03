@@ -6,7 +6,7 @@ import { Addr } from "../components/Addr";
 import { Delivery } from "../components/Delivery";
 import { txUrl } from "../config";
 import { countdown, fmtDate, fromBase, toHex } from "../format";
-import { stateOf, useChainNow, useProgram, vaultOf, type EscrowAccount } from "../program";
+import { stateOf, useChainNow, useProgram, vaultOf, type EscrowAccount, type StateName } from "../program";
 
 type HistItem = { sig: string; ok: boolean; time: number | null; ix: string };
 
@@ -19,7 +19,7 @@ export type EscrowView = {
   vaultBal: string | null;
 };
 
-const TIMELINE = "Funded → Delivered → Released  |  Funded → Refunded  |  Delivered → Frozen → Settled / Burned";
+const STATES: StateName[] = ["funded", "delivered", "released", "refunded", "frozen", "settled", "burned"];
 
 export function EscrowPage({ address }: { address: string }) {
   const program = useProgram();
@@ -137,14 +137,18 @@ export function EscrowPage({ address }: { address: string }) {
       <h2>Umowa <Addr value={pda.toBase58()} /></h2>
       <p>
         Link dla drugiej strony:{" "}
-        <code onClick={() => navigator.clipboard.writeText(location.href)}>{location.href}</code>
+        <code className="hash" onClick={() => navigator.clipboard.writeText(location.href)}>{location.href}</code>
       </p>
       <p>
         Twoja rola: <b>{role === "client" ? "klient" : role === "freelancer" ? "wykonawca" : "obserwator"}</b>
       </p>
 
-      <h3>Stan: {state.toUpperCase()}</h3>
-      <p className="muted">{TIMELINE}</p>
+      <h3>Stan: <span className={`state s-${state}`}>{state.toUpperCase()}</span></h3>
+      <div className="timeline">
+        {STATES.map((s) => (
+          <span key={s} className={`chip s-${s}${s === state ? " current" : ""}`}>{s}</span>
+        ))}
+      </div>
 
       <table>
         <tbody>

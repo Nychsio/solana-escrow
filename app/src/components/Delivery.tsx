@@ -92,7 +92,7 @@ export function Delivery({ pda, esc, now, role, reload }: EscrowView) {
             <p>
               {hash.label}: <code className="hash">{toHex(hash.h)}</code>
               <br />
-              <button disabled={busy} onClick={deliver}>Zgłoś dostawę (mark_delivered)</button>
+              <button className="primary" disabled={busy} onClick={deliver}>Zgłoś dostawę (mark_delivered)</button>
             </p>
           )}
         </>

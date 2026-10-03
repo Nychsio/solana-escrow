@@ -56,7 +56,7 @@ export function Home() {
           <button disabled={tab === "client"} onClick={() => setTab("client")}>Jako klient</button>
           <button disabled={tab === "freelancer"} onClick={() => setTab("freelancer")}>Jako wykonawca</button>
           <button onClick={() => load()}>Odśwież</button>{" "}
-          <a href="#/new"><button>+ Nowa umowa</button></a>
+          <a href="#/new"><button className="primary">+ Nowa umowa</button></a>
           {rows === null ? (
             <p>Ładowanie…</p>
           ) : rows.length === 0 ? (
@@ -73,7 +73,7 @@ export function Home() {
                     <tr key={pda.toBase58()}>
                       <td><Addr value={(tab === "client" ? esc.freelancer : esc.client).toBase58()} /></td>
                       <td>{fromBase(esc.amount)}</td>
-                      <td>{stateOf(esc)}</td>
+                      <td><span className={`state s-${stateOf(esc)}`}>{stateOf(esc)}</span></td>
                       <td>{d ? countdown(d - now) : "—"}</td>
                       <td><a href={`#/escrow/${pda.toBase58()}`}>szczegóły</a></td>
                     </tr>

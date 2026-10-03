@@ -107,17 +107,17 @@ export function Actions({ pda, esc, now, role, reload, vaultBal }: EscrowView) {
   const items: React.ReactNode[] = [];
   const finished = state === "released" || state === "refunded" || state === "settled" || state === "burned";
   if (finished && isClient && vaultBal === "0")
-    items.push(<button key="cl" onClick={close}>Zamknij umowę i odzyskaj rent (close_escrow)</button>);
+    items.push(<button key="cl" className="primary" onClick={close}>Zamknij umowę i odzyskaj rent (close_escrow)</button>);
   if (state === "funded") {
-    if (isClient && now <= deadline) items.push(<button key="r" onClick={release}>Zatwierdź i wypłać (release)</button>);
-    if (isClient && now > deadline) items.push(<button key="rf" onClick={refund}>Odzyskaj środki (refund_if_late)</button>);
+    if (isClient && now <= deadline) items.push(<button key="r" className="primary" onClick={release}>Zatwierdź i wypłać (release)</button>);
+    if (isClient && now > deadline) items.push(<button key="rf" className="primary" onClick={refund}>Odzyskaj środki (refund_if_late)</button>);
     if (isFreelancer && now > deadline) items.push(<p key="m">Termin dostawy minął.</p>);
   }
   if (state === "delivered") {
-    if (isClient) items.push(<button key="r" onClick={release}>Zatwierdź i wypłać (release)</button>);
-    if (isClient && now <= reviewEnd) items.push(<button key="rj" onClick={reject}>Odrzuć dostawę (reject)</button>);
+    if (isClient) items.push(<button key="r" className="primary" onClick={release}>Zatwierdź i wypłać (release)</button>);
+    if (isClient && now <= reviewEnd) items.push(<button key="rj" className="danger" onClick={reject}>Odrzuć dostawę (reject)</button>);
     if (isFreelancer && now <= reviewEnd) items.push(<p key="m">Czekasz na decyzję klienta do końca okna akceptacji.</p>);
-    if (isFreelancer && now > reviewEnd) items.push(<button key="c" onClick={claim}>Odbierz wypłatę (claim_if_silent)</button>);
+    if (isFreelancer && now > reviewEnd) items.push(<button key="c" className="primary" onClick={claim}>Odbierz wypłatę (claim_if_silent)</button>);
   }
 
   let dispute: React.ReactNode = null;
@@ -154,18 +154,18 @@ export function Actions({ pda, esc, now, role, reload, vaultBal }: EscrowView) {
               <p>
                 Udział wykonawcy: <input type="range" min={0} max={100} value={pct} onChange={(e) => setPct(Number(e.target.value))} />{" "}
                 {pct}% ({share(pct * 100)}){" "}
-                <button disabled={busy} onClick={propose}>Zaproponuj (propose_settlement)</button>
+                <button className="primary" disabled={busy} onClick={propose}>Zaproponuj (propose_settlement)</button>
               </p>
             )}
             {role && proposer !== 0 && proposer !== myCode && (
-              <button disabled={busy} onClick={accept}>Przyjmij propozycję drugiej strony (accept_settlement)</button>
+              <button className="primary" disabled={busy} onClick={accept}>Przyjmij propozycję drugiej strony (accept_settlement)</button>
             )}
             {!role && <p>Tylko strony umowy mogą proponować ugodę.</p>}
           </>
         ) : (
           <>
             <p>Okno sporu minęło bez ugody. Każdy może spalić środki — nikt na sporze nie zyskuje.</p>
-            <button disabled={busy} onClick={burn}>Spal środki (burn_if_unsettled)</button>
+            <button className="danger" disabled={busy} onClick={burn}>Spal środki (burn_if_unsettled)</button>
           </>
         )}
       </div>

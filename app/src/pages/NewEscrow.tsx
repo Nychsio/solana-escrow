@@ -134,7 +134,7 @@ export function NewEscrow() {
         </label>
       </p>
       {formError && <p className="error">{formError}</p>}
-      <button disabled={busy} onClick={submit}>
+      <button className="primary" disabled={busy} onClick={submit}>
         {busy ? "Wysyłanie…" : "Utwórz i wpłać do skarbca"}
       </button>
     </div>
