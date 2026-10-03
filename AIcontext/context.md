@@ -23,3 +23,15 @@
 - Konta nie są zamykane (rent zostaje w kontach `Escrow` i skarbcach).
 - `create` zmienił sygnaturę (nowy ostatni argument); klienci muszą go przekazywać.
 - W repo jest `AIcontext/plan.md` (commit `b6b9f20` spoza tej pracy) — nie ruszane.
+
+## Research: spór bez arbitra (2026-10-03)
+- Problem: `reject` -> `Frozen` blokuje środki na zawsze, klient może grieferować. Trzeba wyjścia bez arbitra/oracle/admina.
+- Kleros, UMA, Aragon, Reality.eth odpadają: pośrednik rozproszony na posiadaczy tokenów. Odpowiedź dla jury "czemu nie Kleros".
+- Podstawa: Asgaonkar & Krishnamachari 2019 (dual-deposit escrow bez zaufanego pośrednika), Bisq (time-locked payout + spalenie), Rubinstein (alternating offers, koszt zwłoki).
+- Kierunek: `propose_settlement` / `accept_settlement` w oknie sporu, po oknie publiczny `burn_if_unsettled`.
+- Dziura (first-mover): po burn obie strony = 0, więc klient po `reject` proponuje ~1 bps dla wykonawcy i wykonawca musi przyjąć. Griefing się opłaca.
+- Wariant decay (rekomendowany): w `accept_settlement` najpierw burn `saldo * elapsed / dispute_window * X%` (np. 20%), reszta wg bps. Jedno pole + CPI burn, rozmiar konta bez zmian.
+- Dual-deposit odrzucony czasowo: zmienia `create` i flow demo.
+- DECYZJA OTWARTA: CEL bez zmian vs CEL + decay. Po decyzji dopisać do decisions.md.
+- Nie wstawiać do README/prezentacji: Haggle Protocol, Synmerco, Octasol, Agent Arena (podane przez Gemini bez linków, niezweryfikowane).
+

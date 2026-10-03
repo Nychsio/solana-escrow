@@ -20,6 +20,7 @@ Format: `data | decyzja | dlaczego | kto`
 2026-10-03 | Ugoda dzieli aktualne saldo skarbca (saldo*bps/10000 dla wykonawcy, reszta dla klienta), zaokrąglenie na korzyść klienta | suma wypłat zawsze równa saldu, brak resztek; działa z mintami z opłatą transferową | Claude Code
 2026-10-03 | accept_settlement wymaga podania bps zgodnego z zapisanym | ochrona przed podmianą propozycji tuż przed akceptacją | Piotr
 2026-10-03 | Seedy podpisu PDA w jednym miejscu (Escrow::with_signer_seeds), używane przez wypłaty i spalenie | jedna ścieżka podpisu skarbca | Claude Code
+2026-10-03 | Research mechanizmu sporu (zamiast Frozen) przez Gemini + analiza Claude; kierunek: ugoda dwustronna + publiczny burn po oknie, bez arbitra (Kleros/UMA odrzucone: pośrednik rozproszony) | Frozen blokuje środki na zawsze i pozwala grieferować; wybór wariantu decay: OTWARTE | Piotr / Claude
 
 ## Użyte komponenty zewnętrzne (disclosure)
 - Solana (devnet), Solana CLI
@@ -29,3 +30,4 @@ Format: `data | decyzja | dlaczego | kto`
 - @anchor-lang/core, @solana/web3.js, @solana/spl-token, mocha, ts-mocha, chai (testy)
 - Rust 1.89.0 (rust-toolchain.toml), Solana CLI (Agave) 3.1.10, Anchor CLI 1.1.2
 - Surfpool 1.6.0 (lokalny walidator uruchamiany przez `anchor test`)
+- Gemini (research mechanizmów sporu, bez generowania kodu)

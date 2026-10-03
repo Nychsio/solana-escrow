@@ -1,69 +1,74 @@
-# plan.md — harmonogram do deadline'u
+# plan.md — jak wygląda aplikacja
 
-Deadline zgłoszenia: **nd 2026-10-04 23:00**. Cel wewnętrzny: **zgłoszenie wysłane do 21:00** (2 h bufora).
-Start planu: sob 2026-10-03 18:15. Do deadline'u ok. 29 h, w tym sen.
+Frontend tylko czyta konta z chaina i buduje transakcje. Nie ma backendu ani bazy danych, a o każdej zmianie stanu decyduje program.
 
-Zasada: jedno zadanie naraz. Zadanie zamknięte = kryterium ukończenia spełnione + commit + wpis w log.md.
+## Role
+- **Klient**: tworzy umowę, wpłaca środki, zatwierdza lub odrzuca dostawę, odzyskuje środki po terminie.
+- **Wykonawca**: zgłasza dostawę i odbiera wypłatę, gdy klient milczy.
+Rolę wyznacza podłączony portfel: porównujemy go z `escrow.client` i `escrow.freelancer`. Brak logowania i kont.
 
-## Kamienie milowe (twarde)
-| # | Kiedy | Co musi być prawdą |
+## Ekrany
+
+### 1. Start
+- Przycisk „Połącz portfel” (Wallet Adapter: Phantom, Solflare).
+- Plakietka **devnet** i ID programu z linkiem do Explorera (dowód dla jury, że logika jest on-chain).
+
+### 2. Moje umowy
+- Dwie zakładki: **Jako klient** / **Jako wykonawca**.
+- Dane z `getProgramAccounts` z filtrem `memcmp` po polu `client` (offset 8) albo `freelancer` (offset 40).
+- Wiersz: druga strona (skrócony adres), kwota, stan, najbliższy termin z odliczaniem.
+- Przycisk „Nowa umowa”.
+
+### 3. Nowa umowa (klient)
+Pola:
+- adres wykonawcy,
+- token (domyślnie testowy mint z demo),
+- kwota,
+- termin dostawy (data i godzina),
+- okno akceptacji (presety: 2 min do demo, 24 h, 3 dni, 7 dni).
+`id` generuje frontend (np. timestamp). Wysyłka tworzy umowę przez `create`, po czym przechodzi do ekranu 4 z linkiem do transakcji.
+
+### 4. Szczegóły umowy (główny ekran)
+Adres URL: `/escrow/<adres PDA>`. Ten link klient wysyła wykonawcy.
+- **Oś stanu:** Funded → Delivered → Released, z rozgałęzieniami Refunded i Frozen.
+- **Liczniki:** do terminu dostawy (`deadline_ts`) i do końca okna akceptacji (`delivered_at + review_window_secs`).
+- **Saldo skarbca** pobrane na żywo z konta tokenowego.
+- **Hash dostawy**, gdy jest zapisany.
+- **Przyciski akcji** według tabeli niżej. Pokazujemy tylko akcje dostępne dla roli i stanu.
+- **Historia transakcji** umowy z linkami do Explorera.
+
+### 5. Dostawa (wykonawca, na ekranie 4)
+- Wykonawca wrzuca plik albo wkleja tekst lub link. SHA-256 liczy przeglądarka, plik nigdzie nie wychodzi.
+- Akcja `mark_delivered(hash)`.
+- **Weryfikacja (klient):** klient wrzuca plik otrzymany od wykonawcy, a aplikacja porównuje jego hash z zapisanym on-chain i pokazuje ✅/❌. To dowód, *co* zostało dostarczone, bez pośrednika.
+
+## Akcje według roli i stanu
+| Stan | Klient | Wykonawca |
 |---|---|---|
-| M1 | sob 19:00 | Decyzja D1 (Frozen) podjęta i zapisana w decisions.md |
-| M2 | sob 21:30 | Program na devnecie, ID w README, flow przeklikany skryptem |
-| M3 | nd 12:00 | **Code freeze.** Pełny flow z frontendu na devnecie, upgrade authority odebrany |
-| M4 | nd 19:00 | PDF + wideo + README gotowe |
-| M5 | nd 21:00 | Zgłoszenie wysłane |
+| Funded, przed terminem | Zatwierdź i wypłać (`release`) | Zgłoś dostawę (`mark_delivered`) |
+| Funded, po terminie | Odzyskaj środki (`refund_if_late`) | — (pokaż: „termin minął”) |
+| Delivered, w oknie | Zatwierdź (`release`), Odrzuć (`reject`) | — (licznik okna) |
+| Delivered, po oknie | Zatwierdź (`release`) | Odbierz wypłatę (`claim_if_silent`) |
+| Released / Refunded | — | — |
+| Frozen | zależy od D1 | zależy od D1 |
 
-## Decyzje blokujące
-**D1 — co z `Frozen` (przed zadaniem 3).** Do wyboru:
-- A) Zamrożenie ostateczne. 0 h pracy. Ryzyko: jury zapyta "pieniądze giną na zawsze?" — słaby punkt w 20% (pomysł) i 15% (wdrożenie).
-- B) Ugoda dwustronna: `propose_settlement(freelancer_bps)` przez jedną stronę + `accept_settlement` przez drugą → podział skarbca. Bez arbitra, obie strony podpisują. ~1,5 h + testy. Zamyka dziurę i może być cechą wyróżniającą (pkt 5 z main.md).
-Rekomendacja: **B**, jeśli mieści się do 20:30. Jeśli nie — A i ugoda idzie do "co za tydzień".
+- `reject` wymaga potwierdzenia w oknie dialogowym z ostrzeżeniem, że środki zostaną zamrożone.
+- Przyciski wyświetlamy według zegara przeglądarki, ale rozstrzyga zegar on-chain. Jeśli program odrzuci transakcję, pokazujemy czytelny komunikat zamiast surowego błędu.
+- Każda wypłata dokłada w tej samej transakcji `createAssociatedTokenAccountIdempotent` dla odbiorcy, bo program wymaga istniejącego konta tokenowego.
 
-**D2 — stack frontendu (przed zadaniem 4).** Propozycja: Vite + React + TS + `@solana/wallet-adapter` + klient Anchor z IDL. Zero backendu.
+## Wspólne elementy UI
+- Toast po każdej transakcji: status i link do Explorera.
+- Tłumaczenie kodów błędów programu (`InvalidState`, `Unauthorized`, …) na zdania po polsku.
+- Adresy skracane, z kopiowaniem po kliknięciu.
 
-## Harmonogram
-### Sobota 03.10
-| Godz. | Zadanie | Kryterium ukończenia |
-|---|---|---|
-| 18:15–19:00 | D1 + D2 | wpisy w decisions.md |
-| 19:00–20:30 | Zadanie 2b (tylko przy D1=B): ugoda + testy | `anchor test` zielony, commit |
-| 20:30–21:30 | Zadanie 3: deploy devnet + skrypt demo (mint testowy, 2 portfele, create → deliver → release) | tx w Explorerze, ID programu w README |
-| 21:30–01:00 | Zadanie 4a: frontend — portfel, `create`, lista umów, widok klienta | create z UI widoczny w Explorerze |
-| 01:00–08:00 | Sen | — |
+## Poza aplikacją (skrypt demo, nie UI)
+- Utworzenie testowego minta i rozdanie tokenów dwóm portfelom. Klucz mint authority nie może trafić do frontendu.
+- Airdrop SOL na devnecie.
 
-### Niedziela 04.10
-| Godz. | Zadanie | Kryterium ukończenia |
-|---|---|---|
-| 08:00–11:00 | Zadanie 4b: widok wykonawcy, mark_delivered / release / claim / refund / reject (+ ugoda), link do Explorera po każdej tx | 3 ścieżki przeklikane na devnecie |
-| 11:00–12:00 | Zadanie 3b: finalny redeploy + `set-upgrade-authority --final` | `solana program show` = brak authority |
-| 12:00 | **CODE FREEZE** | od teraz tylko bugfixy blokujące demo |
-| 12:00–14:00 | Zadanie 6a: README (problem, architektura, jak uruchomić, ID programu, ograniczenia, "co za tydzień") + odpowiedzi dla jury | README kompletne w repo |
-| 14:00–16:00 | Zadanie 6b: PDF max 10 slajdów | PDF w repo / gotowy do uploadu |
-| 16:00–18:30 | Zadanie 6c: wideo max 3 min + nagranie zapasowe flow | publiczny link działa w oknie incognito |
-| 18:30–19:00 | Przegląd całości vs kryteria oceny | checklista niżej odhaczona |
-| 19:00–21:00 | Zgłoszenie (tytuł, opis, linki) | potwierdzenie wysłania |
-| 21:00–23:00 | Bufor | — |
+## Otwarte decyzje
+- **D1 — Frozen:** A) zamrożenie jest ostateczne albo B) ugoda dwustronna. Przy B dochodzi panel ugody na ekranie 4: jedna strona proponuje podział (suwak %), druga akceptuje (`propose_settlement` / `accept_settlement`).
+- **D2 — stack:** propozycja Vite + React + TS + `@solana/wallet-adapter` + klient Anchor z IDL. Hosting statyczny (np. Vercel lub GitHub Pages) albo tylko lokalnie do demo.
+- **Wygląd:** design nie jest oceniany, więc minimalny CSS lub gotowa biblioteka komponentów.
 
-## Dlaczego upgrade authority dopiero w niedzielę
-Odebranie go w sobotę = każdy bug znaleziony przy frontendzie wymaga nowego programu pod nowym ID. Deploy w sobotę, finalizacja przy code freeze.
-
-## Cięcia (jeśli jesteśmy w plecy)
-Kolejność wyrzucania:
-1. Ugoda (D1 → A), jeśli 2b nie skończone do 20:30.
-2. Lista umów w UI → wpisanie adresu umowy ręcznie.
-3. Ścieżka `reject` w UI → pokazana tylko w testach / skrypcie.
-4. Nagranie zapasowe → wystarczy wideo.
-Nie tniemy: deploy devnet, odebrany upgrade authority, 3 ścieżki na żywo, README, PDF, wideo.
-
-## Checklista zgłoszenia
-- [ ] Tytuł, nazwa zespołu, członkowie
-- [ ] Opis z uzasadnieniem (gdzie znika pośrednik)
-- [ ] PDF ≤ 10 slajdów
-- [ ] Wideo ≤ 3 min, publiczny link
-- [ ] Publiczne repo z README, ID programu na devnecie, linki do tx w Explorerze
-- [ ] decisions.md z pełnym disclosure narzędzi
-
-## Brakujące dane (do uzupełnienia przez Piotra)
-- Koszt pośrednika w liczbach (prowizje Upwork / Escrow.com) — sprawdzić u źródła, nie zgadywać.
-- Nazwa zespołu, tytuł projektu.
+## Poza zakresem
+Czat, powiadomienia, profile, oceny, wiele tokenów naraz, mobile, backend do indeksowania.
