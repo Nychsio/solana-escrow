@@ -21,6 +21,7 @@ export function Actions({ pda, esc, now, role, reload, vaultBal }: EscrowView) {
   const { publicKey } = useWallet();
   const { busy, run } = useTx();
   const [pct, setPct] = useState(50);
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
 
   if (!publicKey) return <p>Połącz portfel, żeby wykonać akcję.</p>;
 
@@ -68,6 +69,16 @@ export function Actions({ pda, esc, now, role, reload, vaultBal }: EscrowView) {
         .preInstructions([ensureAta(esc.client, clientToken)])
         .rpc()
     );
+  const cancel = async () => {
+    setConfirmingCancel(false);
+    await exec("Rezygnacja wykonawcy (cancel_by_freelancer)", () =>
+      program.methods
+        .cancelByFreelancer()
+        .accountsPartial({ freelancer: publicKey, escrow: pda, mint, vault, clientToken, tokenProgram: TOKEN_PROGRAM_ID })
+        .preInstructions([ensureAta(esc.client, clientToken)])
+        .rpc()
+    );
+  };
   const reject = () => {
     if (
       !confirm(
@@ -118,6 +129,23 @@ export function Actions({ pda, esc, now, role, reload, vaultBal }: EscrowView) {
     if (isClient && now <= reviewEnd) items.push(<button key="rj" className="danger" onClick={reject}>Odrzuć dostawę (reject)</button>);
     if (isFreelancer && now <= reviewEnd) items.push(<p key="m">Czekasz na decyzję klienta do końca okna akceptacji.</p>);
     if (isFreelancer && now > reviewEnd) items.push(<button key="c" className="primary" onClick={claim}>Odbierz wypłatę (claim_if_silent)</button>);
+  }
+
+  // The freelancer can always hand the whole vault back (no burn); only they lose, so no time rule.
+  if (isFreelancer && (state === "funded" || state === "delivered" || state === "frozen")) {
+    items.push(
+      confirmingCancel ? (
+        <div key="cancel" className="panel">
+          <p>Klient dostanie 100% środków, ty 0. Nieodwracalne.</p>
+          <button className="danger" onClick={cancel}>Potwierdzam rezygnację</button>{" "}
+          <button onClick={() => setConfirmingCancel(false)}>Anuluj</button>
+        </div>
+      ) : (
+        <button key="cancel" className="danger" onClick={() => setConfirmingCancel(true)}>
+          Zrezygnuj i zwróć środki klientowi
+        </button>
+      )
+    );
   }
 
   let dispute: React.ReactNode = null;

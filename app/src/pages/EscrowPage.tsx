@@ -10,6 +10,9 @@ import { stateOf, useChainNow, useProgram, vaultOf, type EscrowAccount, type Sta
 
 type HistItem = { sig: string; ok: boolean; time: number | null; ix: string };
 
+// Friendlier names for instructions whose log name alone is unclear.
+const IX_LABELS: Record<string, string> = { CancelByFreelancer: "Rezygnacja wykonawcy (CancelByFreelancer)" };
+
 export type EscrowView = {
   pda: PublicKey;
   esc: EscrowAccount;
@@ -112,7 +115,7 @@ export function EscrowPage({ address }: { address: string }) {
         <ul className="history">
           {history.map((h) => (
             <li key={h.sig}>
-              {h.time ? fmtDate(h.time) : "?"} · <b>{h.ix}</b> {h.ok ? "" : "(błąd)"} ·{" "}
+              {h.time ? fmtDate(h.time) : "?"} · <b>{IX_LABELS[h.ix] ?? h.ix}</b> {h.ok ? "" : "(błąd)"} ·{" "}
               <a href={txUrl(h.sig)} target="_blank" rel="noreferrer">{h.sig.slice(0, 12)}…</a>
             </li>
           ))}
@@ -189,7 +192,7 @@ export function EscrowPage({ address }: { address: string }) {
       <ul className="history">
         {history.map((h) => (
           <li key={h.sig}>
-            {h.time ? fmtDate(h.time) : "?"} · <b>{h.ix}</b> {h.ok ? "" : "(błąd)"} ·{" "}
+            {h.time ? fmtDate(h.time) : "?"} · <b>{IX_LABELS[h.ix] ?? h.ix}</b> {h.ok ? "" : "(błąd)"} ·{" "}
             <a href={txUrl(h.sig)} target="_blank" rel="noreferrer">{h.sig.slice(0, 12)}…</a>
           </li>
         ))}
