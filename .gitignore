@@ -7,3 +7,13 @@ test-ledger
 .yarn
 .surfpool
 .demo-keys
+
+# Secrets and private keys: never commit
+.env
+app/.env
+.demo-keys/
+target/deploy/*.json
+*-keypair.json
+
+# Local copy of a chat document
+Claude outputs/
