@@ -28,7 +28,7 @@ Escrow dla zleceń freelancerskich **bez arbitra**. Spory zastępują terminy za
 4. Klient milczy po upływie okna akceptacji → wykonawca odbiera sam → `Released`.
 5. Wykonawca nie dostarczył przed terminem → klient odzyskuje środki → `Refunded`.
 6. Klient odrzuca dostawę w oknie akceptacji → `Frozen` (zapis `frozen_at`). Zaczyna się okno sporu (`dispute_window_secs`, ustawiane w `create`).
-7. W oknie sporu którakolwiek strona proponuje podział (`propose_settlement`, udział wykonawcy w bps); druga strona może go zaakceptować (`accept_settlement`) → skarbiec dzielony, `Settled`. Nowa propozycja nadpisuje starą.
+7. W oknie sporu którakolwiek strona proponuje podział (`propose_settlement`, udział wykonawcy w bps); druga strona może go zaakceptować (`accept_settlement`) → skarbiec dzielony, `Settled`. Nowa propozycja nadpisuje starą. Akceptacja ma decay: część skarbca, proporcjonalna do czasu od zamrożenia (`saldo * elapsed / dispute_window_secs`), jest najpierw spalana (0% zaraz po `reject`, 100% w chwili końca okna, ciągle z `burn_if_unsettled`), a resztę dzieli się wg bps. Opłaca się więc dogadać szybko.
 8. Okno sporu minęło bez ugody → każdy może wywołać `burn_if_unsettled` → całe saldo skarbca spalone, `Burned`. Nikt (także autor) nie zyskuje na sporze.
 
 ## Architektura programu
@@ -37,7 +37,7 @@ Escrow dla zleceń freelancerskich **bez arbitra**. Spory zastępują terminy za
 
 Rozmiar konta jest stały (235 bajtów danych, pilnuje tego asercja w `state.rs`): nowe pola biorą się z `_reserved`.
 
-**Stany:** `Funded, Delivered, Released, Refunded, Frozen, Settled, Burned`. `Released`, `Refunded`, `Settled` i `Burned` są końcowe: żadna instrukcja ich nie akceptuje.
+**Stany:** `Funded, Delivered, Released, Refunded, Frozen, Settled, Burned`. `Released`, `Refunded`, `Settled` i `Burned` są końcowe: jedyna instrukcja, która je przyjmuje, to `close_escrow` (po opróżnieniu skarbca).
 
 **Skarbiec:** konto tokenowe (ATA) z authority = PDA `Escrow`. Wypłacać i spalać może tylko program, podpisem PDA (seedy w jednym miejscu: `Escrow::with_signer_seeds`); wypłaty przez `pay_from_vault`.
 
@@ -51,8 +51,9 @@ Rozmiar konta jest stały (235 bajtów danych, pilnuje tego asercja w `state.rs`
 | `refund_if_late` | klient | state = Funded, now > deadline | skarbiec → klient, `Refunded` |
 | `reject` | klient | state = Delivered, now <= delivered_at + review_window | `Frozen`, zapis `frozen_at`, środki zostają |
 | `propose_settlement(freelancer_bps)` | klient lub wykonawca | state = Frozen, now <= frozen_at + dispute_window, bps <= 10000 | zapis proponującego i bps (nadpisuje poprzednią) |
-| `accept_settlement(freelancer_bps)` | strona inna niż proponujący | Frozen, jest propozycja, bps = zapisany, w oknie sporu | wykonawca: saldo*bps/10000, klient: reszta, `Settled` |
+| `accept_settlement(freelancer_bps)` | strona inna niż proponujący | Frozen, jest propozycja, bps = zapisany, w oknie sporu | najpierw burn `saldo*elapsed/window`, potem wykonawca: reszta*bps/10000, klient: reszta - wykonawca, `Settled` |
 | `burn_if_unsettled` | ktokolwiek (tylko opłata za tx) | Frozen, now > frozen_at + dispute_window | spalenie całego salda skarbca, `Burned` |
+| `close_escrow` | klient | stan Released, Refunded, Settled lub Burned, saldo skarbca = 0 | zamyka skarbiec i konto `Escrow`, cały rent wraca do klienta |
 
 Każda instrukcja sprawdza stan przez jedną funkcję `Escrow::require_state`. W `Frozen` działają tylko `propose_settlement`, `accept_settlement` i `burn_if_unsettled`; wypłat `release`, `claim_if_silent`, `refund_if_late` ani `mark_delivered` stan `Frozen` nie akceptuje.
 

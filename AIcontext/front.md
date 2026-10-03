@@ -120,3 +120,12 @@ Po każdym działającym kroku commit.
 
 ## Po frontendzie (nie w tym zadaniu)
 Odebranie upgrade authority (`solana program set-upgrade-authority 6KsiG… --final`), README, PDF, wideo, zgłoszenie.
+
+## Zmiany IDL po zadaniu 5
+Dotyczą lokalnego programu; **devnet ma jeszcze starą wersję** (upgrade osobno, na znak Piotra). Nowy IDL kopiować do `app/src/idl/` dopiero po upgrade'ie.
+- `accept_settlement`: konto `mint` jest teraz **mut** (decay spala tokeny, więc zmienia supply). Lista kont bez zmian.
+- Nowa instrukcja `close_escrow` (bez argumentów), podpisuje **klient**: konta `client` (mut, signer), `escrow` (mut, zamykane), `mint`, `vault` (mut), `token_program`. Dozwolona w stanach `Released`, `Refunded`, `Settled`, `Burned`, gdy skarbiec ma saldo 0. Po niej konta `escrow` i `vault` nie istnieją, a rent wraca do klienta. Przycisk "Zamknij umowę i odzyskaj rent" tylko dla klienta w stanach końcowych; po zamknięciu umowa znika z listy (konto nie istnieje).
+- Nowy błąd `VaultNotEmpty` ("Vault still holds tokens"); dodać tłumaczenie.
+- Decay w `accept_settlement`: przy akceptacji spala się `saldo * elapsed / dispute_window_secs`, gdzie `elapsed = clamp(teraz - frozen_at, 0, dispute_window_secs)`, a resztę dzieli się wg bps. UI przy akceptacji pokazuje "teraz spalisz X%" (X = elapsed / dispute_window_secs * 100, liczone z czasu chaina) oraz przewidywane kwoty: spalone, dla wykonawcy `reszta * bps / 10000`, dla klienta reszta. Odliczanie okna sporu przy `Frozen` pokazuje, jak rośnie X.
+- Reszta układu konta bez zmian (`Escrow` ma nadal 243 B), `burn_if_unsettled` bez zmian.
+

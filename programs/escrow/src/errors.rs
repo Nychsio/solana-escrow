@@ -34,4 +34,6 @@ pub enum ErrorCode {
     ProposerCannotAccept,
     #[msg("Accepted share does not match the proposed one")]
     SettlementMismatch,
+    #[msg("Vault still holds tokens")]
+    VaultNotEmpty,
 }

@@ -35,6 +35,9 @@ Format: `data | decyzja | dlaczego | kto`
 2026-10-03 | SHA-256 dostawy liczone w przeglądarce (Web Crypto), plik nie wychodzi z komputera | dowód „co dostarczono” bez pośrednika i bez przechowywania pliku | Piotr
 2026-10-03 | Historia umowy z getSignaturesForAddress + nazwa instrukcji z logów (getTransactions) | bez indeksera | Claude Code
 2026-10-03 | Klucze demo do Phantoma: scripts/export-keys.ts (yarn demo:keys), wynik tylko w terminalu | brak kluczy w repo i we froncie | Piotr
+2026-10-03 | Decay w accept_settlement: burn = saldo * elapsed / dispute_window_secs (liniowo, w dół), potem podział reszty wg bps | rozwiązuje first-mover z researchu: griefing przez reject przestaje się opłacać, a 100% w końcu okna daje ciągłość z burn_if_unsettled | Piotr
+2026-10-03 | close_escrow (tylko klient, stany końcowe, skarbiec pusty): zamyka skarbiec (CPI close_account, podpis PDA) i konto Escrow (close = client) | zwrot rentu; po zamknięciu id można użyć ponownie | Piotr
+2026-10-03 | burn_if_unsettled bez zmian, a CPI burn w accept_settlement napisany osobno (bez refaktoru wspólnego helpera) | zakaz ruszania burn_if_unsettled w zadaniu 5; do ewentualnego scalenia później | Claude Code
 
 ## Użyte komponenty zewnętrzne (disclosure)
 - Solana (devnet), Solana CLI

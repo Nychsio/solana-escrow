@@ -61,4 +61,8 @@ pub mod escrow {
     pub fn burn_if_unsettled(ctx: Context<BurnIfUnsettled>) -> Result<()> {
         instructions::dispute::burn_if_unsettled(ctx)
     }
+
+    pub fn close_escrow(ctx: Context<CloseEscrow>) -> Result<()> {
+        instructions::close::close_escrow(ctx)
+    }
 }
