@@ -37,6 +37,7 @@ export function EscrowPage({ address }: { address: string }) {
   const [error, setError] = useState<string | null>(null);
   const [vaultBal, setVaultBal] = useState<string | null>(null);
   const [history, setHistory] = useState<HistItem[]>([]);
+  const [closed, setClosed] = useState(false);
 
   const loadAccount = useCallback(async () => {
     if (!pda) return;
@@ -47,7 +48,16 @@ export function EscrowPage({ address }: { address: string }) {
       const bal = await connection.getTokenAccountBalance(vaultOf(e.mint, pda)).catch(() => null);
       setVaultBal(bal ? bal.value.uiAmountString ?? "0" : null);
     } catch (e) {
-      setError(`Nie znaleziono umowy pod tym adresem (${(e as Error).message})`);
+      // A closed escrow (close_escrow) no longer exists on chain: decide by the account
+      // lookup, not by the error text.
+      const info = await connection.getAccountInfo(pda).catch(() => undefined);
+      if (info === null) {
+        setClosed(true);
+        setEsc(null);
+        setError(null);
+      } else {
+        setError(`Nie znaleziono umowy pod tym adresem (${(e as Error).message})`);
+      }
     }
   }, [pda, program, connection]);
 
@@ -80,11 +90,34 @@ export function EscrowPage({ address }: { address: string }) {
 
   useEffect(() => {
     reload();
+  }, [reload]);
+
+  // No polling once the account is closed: it cannot come back.
+  useEffect(() => {
+    if (closed) return;
     const t = setInterval(loadAccount, 10_000);
     return () => clearInterval(t);
-  }, [reload, loadAccount]);
+  }, [loadAccount, closed]);
 
   if (!pda) return <p>Nieprawidłowy adres umowy.</p>;
+  if (closed)
+    return (
+      <div>
+        <h2>Umowa <Addr value={pda.toBase58()} /></h2>
+        <p><b>Umowa zamknięta, rent zwrócony klientowi.</b></p>
+        <p><a href="#/">← Lista umów</a></p>
+        <h3>Historia transakcji</h3>
+        <button onClick={() => loadHistory()}>Odśwież</button>
+        <ul>
+          {history.map((h) => (
+            <li key={h.sig}>
+              {h.time ? fmtDate(h.time) : "?"} · <b>{h.ix}</b> {h.ok ? "" : "(błąd)"} ·{" "}
+              <a href={txUrl(h.sig)} target="_blank" rel="noreferrer">{h.sig.slice(0, 12)}…</a>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
   if (error) return <p className="error">{error}</p>;
   if (!esc) return <p>Ładowanie…</p>;
 
