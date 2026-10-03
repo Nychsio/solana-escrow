@@ -41,6 +41,6 @@ export function translateError(e: unknown): string {
   }
   if (/reject/i.test(text) && /user|request/i.test(text)) return "Odrzucono w portfelu.";
   if (/insufficient (funds|lamports)|0x1\b/i.test(text)) return "Za mało środków (SOL na opłatę lub tokenów).";
-  if (/blockhash not found|expired/i.test(text)) return "Transakcja wygasła, spróbuj ponownie.";
+  if (/blockhash not found|block height exceeded|expired/i.test(text)) return "Transakcja wygasła, spróbuj ponownie.";
   return text.slice(0, 300);
 }

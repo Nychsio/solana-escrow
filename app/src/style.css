@@ -13,3 +13,4 @@ button { margin: 2px; }
 .toast.ok { border-color: #2a2; }
 .toast.err { border-color: #c22; }
 .panel { border: 1px solid #ccc; padding: .75rem; margin: .75rem 0; }
+.toast.info { border-color: #ca2; }

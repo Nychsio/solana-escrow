@@ -2,11 +2,20 @@ import { createContext, useCallback, useContext, useState, type ReactNode } from
 import { txUrl } from "./config";
 import { translateError } from "./errors";
 
-type Toast = { id: number; ok: boolean; label: string; sig?: string; msg?: string };
+type Toast = { id: number; ok: boolean; info?: boolean; label: string; sig?: string; msg?: string };
 type Ctx = { busy: boolean; run: (label: string, fn: () => Promise<string>) => Promise<string | null> };
 
 const TxCtx = createContext<Ctx>(null as never);
 export const useTx = () => useContext(TxCtx);
+
+// Blockhash expired before the tx landed (e.g. slow wallet popup). A wallet rejection is NOT this.
+const isExpired = (e: unknown) => {
+  const x = e as { name?: string; message?: string };
+  return (
+    x?.name === "TransactionExpiredBlockheightExceededError" ||
+    /block height exceeded|blockhash not found/i.test(x?.message ?? String(e))
+  );
+};
 
 // Every transaction goes through `run`: one at a time, result shown as a toast with an Explorer link.
 export function TxProvider({ children }: { children: ReactNode }) {
@@ -17,7 +26,16 @@ export function TxProvider({ children }: { children: ReactNode }) {
   const run = useCallback(async (label: string, fn: () => Promise<string>) => {
     setBusy(true);
     try {
-      const sig = await fn();
+      let sig: string;
+      try {
+        sig = await fn();
+      } catch (e) {
+        if (!isExpired(e)) throw e;
+        // One retry: .rpc() fetches a fresh blockhash and the wallet asks for a new signature.
+        console.warn(label, "blockhash expired, retrying", e);
+        push({ ok: true, info: true, label: `Ponawiam… (${label})`, msg: "Transakcja wygasła, podpisz ponownie w portfelu." });
+        sig = await fn();
+      }
       push({ ok: true, label, sig });
       return sig;
     } catch (e) {
@@ -34,8 +52,8 @@ export function TxProvider({ children }: { children: ReactNode }) {
       {children}
       <div className="toasts">
         {toasts.map((t) => (
-          <div key={t.id} className={`toast ${t.ok ? "ok" : "err"}`}>
-            <b>{t.ok ? "✔" : "✖"} {t.label}</b>{" "}
+          <div key={t.id} className={`toast ${t.info ? "info" : t.ok ? "ok" : "err"}`}>
+            <b>{t.info ? "⟳" : t.ok ? "✔" : "✖"} {t.label}</b>{" "}
             {t.sig && (
               <a href={txUrl(t.sig)} target="_blank" rel="noreferrer">Explorer</a>
             )}
