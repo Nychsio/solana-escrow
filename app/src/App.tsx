@@ -5,6 +5,7 @@ import { Addr } from "./components/Addr";
 import { PROGRAM_ID, RPC_URL } from "./config";
 import { EscrowPage } from "./pages/EscrowPage";
 import { Home } from "./pages/Home";
+import { NewEscrow } from "./pages/NewEscrow";
 import { TxProvider } from "./tx";
 
 // Hash routing: works on any static host, no server needed.
@@ -22,6 +23,7 @@ function Router() {
   const route = useRoute();
   const m = route.match(/^\/escrow\/(\w+)/);
   if (m) return <EscrowPage address={m[1]} />;
+  if (route === "/new") return <NewEscrow />;
   return <Home />;
 }
 
