@@ -6,7 +6,7 @@ Escrow dla zleceń freelancerskich **bez arbitra**, na Solanie (Anchor). Warunki
 
 Zaimplementowana pełna logika escrow: `create`, `mark_delivered`, `release`, `claim_if_silent`, `refund_if_late`, `reject` oraz rozstrzyganie sporów bez arbitra: `propose_settlement`, `accept_settlement`, `burn_if_unsettled`, oraz `close_escrow` (odzyskanie rentu).
 
-Program jest wdrożony na devnecie (wersja sprzed decay i `close_escrow`; upgrade osobno). Jeszcze nie zrobione: frontend, odebranie upgrade authority.
+Program jest wdrożony na devnecie (wersja z decay i `close_escrow`). Jeszcze nie zrobione: frontend, odebranie upgrade authority.
 
 ## Devnet
 

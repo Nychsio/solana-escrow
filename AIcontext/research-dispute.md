@@ -22,7 +22,6 @@ Po burn obie strony = 0, więc klient po `reject` proponuje ~1 bps dla wykonawcy
 - "Burn wymusza prawdomówność (Myerson–Satterthwaite)": błąd.
 - arXiv 2411.19431 = "Money Burning Improves Mediated Communication" (informacja, mediator), nie escrow.
 - arXiv 2303.00533 = "Towards a Privacy-Preserving Dispute Resolution Protocol on Ethereum" (ZK), nie krytykuje dual-deposit.
-- Haggle Protocol, Synmerco, Octasol, Agent Arena: bez linków, niezweryfikowane.
 
 ## Opcje
 1. CEL bez zmian (prosto, dziura first-movera).

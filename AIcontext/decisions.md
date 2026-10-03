@@ -38,6 +38,7 @@ Format: `data | decyzja | dlaczego | kto`
 2026-10-03 | Decay w accept_settlement: burn = saldo * elapsed / dispute_window_secs (liniowo, w dół), potem podział reszty wg bps | rozwiązuje first-mover z researchu: griefing przez reject przestaje się opłacać, a 100% w końcu okna daje ciągłość z burn_if_unsettled | Piotr
 2026-10-03 | close_escrow (tylko klient, stany końcowe, skarbiec pusty): zamyka skarbiec (CPI close_account, podpis PDA) i konto Escrow (close = client) | zwrot rentu; po zamknięciu id można użyć ponownie | Piotr
 2026-10-03 | burn_if_unsettled bez zmian, a CPI burn w accept_settlement napisany osobno (bez refaktoru wspólnego helpera) | zakaz ruszania burn_if_unsettled w zadaniu 5; do ewentualnego scalenia później | Claude Code
+2026-10-03 | Upgrade programu na devnecie do wersji z main (decay + close_escrow) zatwierdzony; stwierdzono, że devnet jest już bajt w bajt równy lokalnemu escrow.so, więc dodatkowy `anchor upgrade` pominięty | koszt bufora ~1,5 SOL bez zysku; front przełączony na nowy IDL | Piotr (decyzja), Claude Code (weryfikacja)
 
 ## Użyte komponenty zewnętrzne (disclosure)
 - Solana (devnet), Solana CLI
