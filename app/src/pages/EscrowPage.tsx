@@ -1,10 +1,30 @@
-import { ArrowLeft, ExternalLink } from "lucide-react";
+import {
+  Archive,
+  ArrowLeft,
+  ArrowSquareOut,
+  ArrowsClockwise,
+  Briefcase,
+  Clock,
+  Copy,
+  Fingerprint,
+  Fire,
+  Handshake,
+  ListChecks,
+  Scales,
+  SealCheck,
+  Timer,
+  UploadSimple,
+  User,
+  Vault,
+  type Icon,
+} from "@phosphor-icons/react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Actions } from "../components/Actions";
 import { Addr } from "../components/Addr";
 import { Delivery } from "../components/Delivery";
+import { Card, CopyIcon, Hero, useCopy } from "../components/ui";
 import { txUrl } from "../config";
 import { countdown, fmtDate, fromBase, toHex } from "../format";
 import { stateOf, useChainNow, useProgram, vaultOf, type EscrowAccount, type StateName } from "../program";
@@ -24,6 +44,87 @@ export type EscrowView = {
 };
 
 const STATES: StateName[] = ["funded", "delivered", "released", "refunded", "frozen", "settled", "burned"];
+export const STATE_PL: Record<StateName, string> = {
+  funded: "Opłacona",
+  delivered: "Dostarczona",
+  released: "Wypłacona",
+  refunded: "Zwrócona",
+  frozen: "Zamrożona",
+  settled: "Ugoda",
+  burned: "Spalona",
+};
+export const STATE_ICON: Record<StateName, Icon> = {
+  funded: Vault,
+  delivered: UploadSimple,
+  released: SealCheck,
+  refunded: ArrowsClockwise,
+  frozen: Scales,
+  settled: Handshake,
+  burned: Fire,
+};
+// States that were passed on the way to the given state (delivered only if a delivery happened).
+const BEFORE: Record<StateName, StateName[]> = {
+  funded: [],
+  delivered: ["funded"],
+  released: ["funded", "delivered"],
+  refunded: ["funded"],
+  frozen: ["funded", "delivered"],
+  settled: ["funded", "delivered", "frozen"],
+  burned: ["funded", "delivered", "frozen"],
+};
+
+function History({ items, onRefresh }: { items: HistItem[]; onRefresh: () => void }) {
+  return (
+    <Card icon={ListChecks} title="Historia transakcji">
+      <ul className="history">
+        {items.map((h) => (
+          <li key={h.sig}>
+            <span className="muted">{h.time ? fmtDate(h.time) : "?"}</span>
+            <b>{IX_LABELS[h.ix] ?? h.ix}{h.ok ? "" : " (błąd)"}</b>
+            <a href={txUrl(h.sig)} target="_blank" rel="noreferrer">
+              <span className="mono">{h.sig.slice(0, 12)}…</span>
+              <ArrowSquareOut size={18} weight="duotone" />
+            </a>
+          </li>
+        ))}
+      </ul>
+      <button onClick={onRefresh}><ArrowsClockwise size={18} weight="duotone" />Odśwież</button>
+    </Card>
+  );
+}
+
+function CopyLink() {
+  const { copied, copy } = useCopy(location.href);
+  return (
+    <button className="pill-link" onClick={copy}>
+      <Copy size={18} weight="duotone" />
+      {copied ? "Skopiowano" : "Skopiuj link dla drugiej strony"}
+    </button>
+  );
+}
+
+// One definition-list entry: muted label above, value below.
+function Def({ icon: I, label, children }: { icon?: Icon; label: string; children: React.ReactNode }) {
+  return (
+    <div className="def">
+      <dt>{I && <I size={18} weight="duotone" />}{label}</dt>
+      <dd>{children}</dd>
+    </div>
+  );
+}
+
+// One row of the "Czas" card: active counter big, finished windows muted with "minęło".
+function TimeRow({ label, active, left, note }: { label: string; active: boolean; left: number; note: string }) {
+  return (
+    <div className={`timerow${active ? " active" : ""}`}>
+      <Timer size={20} weight="duotone" />
+      <div>
+        <div className="def-label">{label}</div>
+        {active ? <div className="counter">{countdown(left)}</div> : <div className="muted">{note}</div>}
+      </div>
+    </div>
+  );
+}
 
 export function EscrowPage({ address }: { address: string }) {
   const program = useProgram();
@@ -119,28 +220,29 @@ export function EscrowPage({ address }: { address: string }) {
     return () => clearInterval(t);
   }, [loadAccount, closed]);
 
-  if (!pda) return <p>Nieprawidłowy adres umowy.</p>;
+  if (!pda) return <Hero overline="Umowa escrow">Nieprawidłowy adres umowy</Hero>;
   if (closed)
     return (
       <div className="page">
-        <h2 data-ov="Escrow">Umowa <Addr value={pda.toBase58()} /></h2>
-        <p><b>Umowa zamknięta, rent zwrócony klientowi.</b></p>
-        <p><a href="#/" className="back"><ArrowLeft size={16} strokeWidth={2} />Lista umów</a></p>
-        <hr className="glass-separator" />
-        <h3 data-ov="Chain">Historia transakcji</h3>
-        <button onClick={() => loadHistory()}>Odśwież</button>
-        <ul className="history">
-          {history.map((h) => (
-            <li key={h.sig}>
-              {h.time ? fmtDate(h.time) : "?"} · <b>{IX_LABELS[h.ix] ?? h.ix}</b> {h.ok ? "" : "(błąd)"} ·{" "}
-              <a href={txUrl(h.sig)} target="_blank" rel="noreferrer"><span className="mono">{h.sig.slice(0, 12)}…</span><ExternalLink size={16} strokeWidth={2} /></a>
-            </li>
-          ))}
-        </ul>
+        <Hero overline="Umowa escrow" lead="Rent zwrócony klientowi." meta={<Addr value={pda.toBase58()} />}>
+          Umowa zamknięta
+        </Hero>
+        <p><a href="#/" className="back"><ArrowLeft size={18} weight="duotone" />Lista umów</a></p>
+        <History items={history} onRefresh={() => loadHistory()} />
       </div>
     );
-  if (error) return <p className="error">{error}</p>;
-  if (!esc) return <p>Ładowanie…</p>;
+  if (error)
+    return (
+      <div className="page">
+        <Hero overline="Umowa escrow" lead={<span className="error">{error}</span>}>Brak umowy</Hero>
+      </div>
+    );
+  if (!esc)
+    return (
+      <div className="page">
+        <Hero overline="Umowa escrow">Ładowanie…</Hero>
+      </div>
+    );
 
   const state = stateOf(esc);
   const me = publicKey?.toBase58();
@@ -153,67 +255,92 @@ export function EscrowPage({ address }: { address: string }) {
   const hasHash = /[1-9a-f]/.test(hash);
   const view: EscrowView = { pda, esc, now, role, reload, vaultBal };
 
+  const lead = {
+    funded: now <= deadline ? "Środki są w skarbcu. Czekamy na dostawę od wykonawcy." : "Termin dostawy minął. Klient może odzyskać środki.",
+    delivered: reviewEnd && now <= reviewEnd ? "Dostawa zgłoszona. Klient ma czas na akceptację albo odrzucenie." : "Okno akceptacji minęło. Wykonawca może odebrać wypłatę.",
+    released: "Wypłacono wykonawcy. Umowa zakończona.",
+    refunded: "Środki wróciły do klienta. Umowa zakończona.",
+    frozen: disputeEnd && now > disputeEnd ? "Okno sporu minęło. Każdy może spalić środki." : "Dostawa odrzucona. Strony mogą się dogadać przed końcem okna sporu.",
+    settled: "Strony dogadały się. Skarbiec został podzielony.",
+    burned: "Brak ugody. Środki zostały spalone.",
+  }[state];
+  const roleLabel = role === "client" ? "klient" : role === "freelancer" ? "wykonawca" : "obserwator";
+  const RoleIcon = role === "freelancer" ? Briefcase : User;
+
+  const done = (s: StateName) => BEFORE[state].includes(s) && (s !== "delivered" || !!esc.deliveredAt);
+  const SI = STATE_ICON[state];
+
   return (
     <div className="page">
-      <h2 data-ov="Escrow">Umowa <Addr value={pda.toBase58()} /></h2>
-      <p>
-        Link dla drugiej strony:{" "}
-        <code className="hash mono" onClick={() => navigator.clipboard.writeText(location.href)}>{location.href}</code>
-      </p>
-      <p>
-        Twoja rola: <b>{role === "client" ? "klient" : role === "freelancer" ? "wykonawca" : "obserwator"}</b>
-      </p>
+      <Hero
+        overline="Umowa escrow"
+        lead={lead}
+        meta={
+          <>
+            <span className={`state big s-${state}`}><SI size={20} weight="duotone" />{STATE_PL[state]}</span>
+            <span className="role"><RoleIcon size={18} weight="duotone" />{roleLabel}</span>
+            <CopyLink />
+          </>
+        }
+      >
+        {fromBase(esc.amount)} tokenów
+      </Hero>
 
-      <h3 data-ov="Status">Stan: <span className={`state s-${state}`}>{state.toUpperCase()}</span></h3>
-      <div className="timeline">
+      <ol className="path" aria-label="Stan umowy">
         {STATES.map((s) => (
-          <span key={s} className={`chip s-${s}${s === state ? " current" : ""}`}>{s}</span>
-        ))}
-      </div>
-
-      <table>
-        <tbody>
-          <tr><td>Klient</td><td><Addr value={esc.client.toBase58()} /></td></tr>
-          <tr><td>Wykonawca</td><td><Addr value={esc.freelancer.toBase58()} /></td></tr>
-          <tr><td>Token</td><td><Addr value={esc.mint.toBase58()} /></td></tr>
-          <tr><td>Kwota umowy</td><td className="mono">{fromBase(esc.amount)}</td></tr>
-          <tr><td>Saldo skarbca (na żywo)</td><td className="mono">{vaultBal ?? "?"} <Addr value={vaultOf(esc.mint, pda).toBase58()} /></td></tr>
-          <tr>
-            <td>Termin dostawy</td>
-            <td>{fmtDate(deadline)} {state === "funded" && <b>({countdown(deadline - now)})</b>}</td>
-          </tr>
-          <tr>
-            <td>Okno akceptacji</td>
-            <td>
-              {esc.reviewWindowSecs.toString()} s
-              {reviewEnd && <> · do {fmtDate(reviewEnd)} {state === "delivered" && <b>({countdown(reviewEnd - now)})</b>}</>}
-            </td>
-          </tr>
-          <tr>
-            <td>Okno sporu</td>
-            <td>
-              {esc.disputeWindowSecs.toString()} s
-              {disputeEnd && <> · do {fmtDate(disputeEnd)} {state === "frozen" && <b>({countdown(disputeEnd - now)})</b>}</>}
-            </td>
-          </tr>
-          <tr><td>Hash dostawy (SHA-256)</td><td><code className="hash">{hasHash ? hash : "—"}</code></td></tr>
-        </tbody>
-      </table>
-
-      <Delivery {...view} />
-      <Actions {...view} />
-
-      <hr className="glass-separator" />
-      <h3 data-ov="Chain">Historia transakcji</h3>
-      <button onClick={() => loadHistory()}>Odśwież</button>
-      <ul className="history">
-        {history.map((h) => (
-          <li key={h.sig}>
-            {h.time ? fmtDate(h.time) : "?"} · <b>{IX_LABELS[h.ix] ?? h.ix}</b> {h.ok ? "" : "(błąd)"} ·{" "}
-            <a href={txUrl(h.sig)} target="_blank" rel="noreferrer"><span className="mono">{h.sig.slice(0, 12)}…</span><ExternalLink size={16} strokeWidth={2} /></a>
+          <li key={s} className={s === state ? "current" : done(s) ? "past" : "future"}>
+            <span className="dot" />
+            {STATE_PL[s]}
           </li>
         ))}
-      </ul>
+      </ol>
+
+      <div className="grid">
+        <div className="col-main">
+          <Actions {...view} />
+          <Delivery {...view} />
+          <History items={history} onRefresh={() => loadHistory()} />
+        </div>
+        <aside className="col-side">
+          <Card icon={Archive} title="Szczegóły">
+            <dl className="defs">
+              <Def icon={User} label="Klient"><Addr value={esc.client.toBase58()} /></Def>
+              <Def icon={Briefcase} label="Wykonawca"><Addr value={esc.freelancer.toBase58()} /></Def>
+              <Def label="Token"><Addr value={esc.mint.toBase58()} /></Def>
+              <Def icon={Vault} label="Skarbiec">
+                <span className="mono big-num">{vaultBal ?? "?"}</span>{" "}
+                <Addr value={vaultOf(esc.mint, pda).toBase58()} />
+              </Def>
+              <Def icon={Fingerprint} label="Hash dostawy (SHA-256)">
+                {hasHash ? (
+                  <span className="hash-line">
+                    <code className="hash" title={hash}>{hash}</code>
+                    <CopyIcon value={hash} label="Kopiuj hash" />
+                  </span>
+                ) : (
+                  <span className="muted">—</span>
+                )}
+              </Def>
+              <Def label="Adres umowy"><Addr value={pda.toBase58()} /></Def>
+            </dl>
+          </Card>
+          <Card icon={Clock} title="Czas">
+            <TimeRow label={`Termin dostawy · ${fmtDate(deadline)}`} active={state === "funded" && now <= deadline} left={deadline - now} note="minął" />
+            <TimeRow
+              label={`Okno akceptacji · ${esc.reviewWindowSecs.toString()} s`}
+              active={state === "delivered" && !!reviewEnd && now <= reviewEnd}
+              left={(reviewEnd ?? 0) - now}
+              note={reviewEnd ? "minęło" : "zacznie się po dostawie"}
+            />
+            <TimeRow
+              label={`Okno sporu · ${esc.disputeWindowSecs.toString()} s`}
+              active={state === "frozen" && !!disputeEnd && now <= disputeEnd}
+              left={(disputeEnd ?? 0) - now}
+              note={disputeEnd ? "minęło" : "zacznie się po odrzuceniu"}
+            />
+          </Card>
+        </aside>
+      </div>
     </div>
   );
 }

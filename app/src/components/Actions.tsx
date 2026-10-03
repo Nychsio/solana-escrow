@@ -1,4 +1,16 @@
-import { Archive, BadgeCheck, Ban, CheckCheck, Flame, Handshake, Undo2 } from "lucide-react";
+import {
+  ArrowCounterClockwise,
+  Archive,
+  Checks,
+  Fire,
+  Handshake,
+  Lightning,
+  Prohibit,
+  Scales,
+  SealCheck,
+  SignOut,
+  Wallet,
+} from "@phosphor-icons/react";
 import {
   TOKEN_PROGRAM_ID,
   createAssociatedTokenAccountIdempotentInstruction,
@@ -11,6 +23,7 @@ import { fromBase } from "../format";
 import { stateOf, useProgram, vaultOf } from "../program";
 import type { EscrowView } from "../pages/EscrowPage";
 import { useTx } from "../tx";
+import { Act, Card } from "./ui";
 
 const SETTLE_CLIENT = 1;
 const SETTLE_FREELANCER = 2;
@@ -24,7 +37,12 @@ export function Actions({ pda, esc, now, role, reload, vaultBal }: EscrowView) {
   const [pct, setPct] = useState(50);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
 
-  if (!publicKey) return <p>Połącz portfel, żeby wykonać akcję.</p>;
+  if (!publicKey)
+    return (
+      <Card icon={Wallet} title="Akcje">
+        <p>Połącz portfel, żeby wykonać akcję.</p>
+      </Card>
+    );
 
   const state = stateOf(esc);
   const mint = esc.mint;
@@ -119,32 +137,32 @@ export function Actions({ pda, esc, now, role, reload, vaultBal }: EscrowView) {
   const items: React.ReactNode[] = [];
   const finished = state === "released" || state === "refunded" || state === "settled" || state === "burned";
   if (finished && isClient && vaultBal === "0")
-    items.push(<button key="cl" className="primary" onClick={close}><Archive size={16} strokeWidth={2} />Zamknij umowę i odzyskaj rent (close_escrow)</button>);
+    items.push(<Act key="cl" kind="primary" icon={Archive} label="Zamknij umowę i odzyskaj rent" caption="close_escrow · podpisuje klient" onClick={close} />);
   if (state === "funded") {
-    if (isClient && now <= deadline) items.push(<button key="r" className="primary" onClick={release}><BadgeCheck size={16} strokeWidth={2} />Zatwierdź i wypłać (release)</button>);
-    if (isClient && now > deadline) items.push(<button key="rf" className="primary" onClick={refund}><Undo2 size={16} strokeWidth={2} />Odzyskaj środki (refund_if_late)</button>);
+    if (isClient && now <= deadline) items.push(<Act key="r" kind="primary" icon={SealCheck} label="Zatwierdź i wypłać" caption="release · podpisuje klient" onClick={release} />);
+    if (isClient && now > deadline) items.push(<Act key="rf" kind="primary" icon={ArrowCounterClockwise} label="Odzyskaj środki" caption="refund_if_late · podpisuje klient" onClick={refund} />);
     if (isFreelancer && now > deadline) items.push(<p key="m">Termin dostawy minął.</p>);
   }
   if (state === "delivered") {
-    if (isClient) items.push(<button key="r" className="primary" onClick={release}><BadgeCheck size={16} strokeWidth={2} />Zatwierdź i wypłać (release)</button>);
-    if (isClient && now <= reviewEnd) items.push(<button key="rj" className="danger" onClick={reject}><Ban size={16} strokeWidth={2} />Odrzuć dostawę (reject)</button>);
+    if (isClient) items.push(<Act key="r" kind="primary" icon={SealCheck} label="Zatwierdź i wypłać" caption="release · podpisuje klient" onClick={release} />);
+    if (isClient && now <= reviewEnd) items.push(<Act key="rj" kind="danger" icon={Prohibit} label="Odrzuć dostawę" caption="reject · podpisuje klient" onClick={reject} />);
     if (isFreelancer && now <= reviewEnd) items.push(<p key="m">Czekasz na decyzję klienta do końca okna akceptacji.</p>);
-    if (isFreelancer && now > reviewEnd) items.push(<button key="c" className="primary" onClick={claim}><BadgeCheck size={16} strokeWidth={2} />Odbierz wypłatę (claim_if_silent)</button>);
+    if (isFreelancer && now > reviewEnd) items.push(<Act key="c" kind="primary" icon={Lightning} label="Odbierz wypłatę" caption="claim_if_silent · podpisuje wykonawca" onClick={claim} />);
   }
 
   // The freelancer can always hand the whole vault back (no burn); only they lose, so no time rule.
   if (isFreelancer && (state === "funded" || state === "delivered" || state === "frozen")) {
     items.push(
       confirmingCancel ? (
-        <div key="cancel" className="panel">
+        <div key="cancel" className="card-2">
           <p>Klient dostanie 100% środków, ty 0. Nieodwracalne.</p>
-          <button className="danger" onClick={cancel}>Potwierdzam rezygnację</button>{" "}
-          <button onClick={() => setConfirmingCancel(false)}>Anuluj</button>
+          <div className="row">
+            <button className="danger" onClick={cancel}>Potwierdzam rezygnację</button>
+            <button onClick={() => setConfirmingCancel(false)}>Anuluj</button>
+          </div>
         </div>
       ) : (
-        <button key="cancel" className="danger" onClick={() => setConfirmingCancel(true)}>
-          Zrezygnuj i zwróć środki klientowi
-        </button>
+        <Act key="cancel" kind="danger" icon={SignOut} label="Zrezygnuj i zwróć środki klientowi" caption="cancel_by_freelancer · podpisuje wykonawca" onClick={() => setConfirmingCancel(true)} />
       )
     );
   }
@@ -164,49 +182,54 @@ export function Actions({ pda, esc, now, role, reload, vaultBal }: EscrowView) {
     const burned = esc.amount.muln(elapsed).divn(win);
     const rest = esc.amount.sub(burned);
     const fl = rest.muln(esc.settleBps).divn(10000);
+    const expired = now > disputeEnd;
     dispute = (
-      <div className="panel">
-        <h4 data-ov="Spór">Ugoda albo spalenie</h4>
+      <Card icon={expired ? Fire : Scales} title="Spór: ugoda albo spalenie" danger={expired}>
         <p>
           Aktualna propozycja:{" "}
           {proposer === 0
             ? "brak"
             : `${proposer === SETTLE_CLIENT ? "klient" : "wykonawca"} proponuje ${esc.settleBps / 100}% dla wykonawcy (${share(esc.settleBps)})`}
         </p>
-        {now <= disputeEnd ? (
+        {!expired ? (
           <>
             <p>
               Przy akceptacji teraz spalisz {((elapsed / win) * 100).toFixed(1)}% skarbca ({fromBase(burned)}).
               {proposer !== 0 && <> Wykonawca dostanie {fromBase(fl)}, klient {fromBase(rest.sub(fl))}.</>} Ostateczny rachunek liczy program.
             </p>
             {role && (
-              <p>
-                Udział wykonawcy: <input type="range" min={0} max={100} value={pct} onChange={(e) => setPct(Number(e.target.value))} />{" "}
-                {pct}% ({share(pct * 100)}){" "}
-                <button className="primary" disabled={busy} onClick={propose}><Handshake size={16} strokeWidth={2} />Zaproponuj (propose_settlement)</button>
-              </p>
+              <div className="slider">
+                <label>
+                  Udział wykonawcy: <b>{pct}%</b> <span className="muted">({share(pct * 100)})</span>
+                  <input type="range" min={0} max={100} value={pct} onChange={(e) => setPct(Number(e.target.value))} />
+                </label>
+                <Act kind="primary" icon={Handshake} label="Zaproponuj ugodę" caption="propose_settlement · podpisuje klient lub wykonawca" disabled={busy} onClick={propose} />
+              </div>
             )}
             {role && proposer !== 0 && proposer !== myCode && (
-              <button className="primary" disabled={busy} onClick={accept}><CheckCheck size={16} strokeWidth={2} />Przyjmij propozycję drugiej strony (accept_settlement)</button>
+              <Act kind="primary" icon={Checks} label="Przyjmij propozycję drugiej strony" caption="accept_settlement · podpisuje druga strona" disabled={busy} onClick={accept} />
             )}
             {!role && <p>Tylko strony umowy mogą proponować ugodę.</p>}
           </>
         ) : (
           <>
             <p>Okno sporu minęło bez ugody. Każdy może spalić środki — nikt na sporze nie zyskuje.</p>
-            <button className="danger" disabled={busy} onClick={burn}><Flame size={16} strokeWidth={2} />Spal środki (burn_if_unsettled)</button>
+            <Act kind="danger" icon={Fire} label="Spal środki" caption="burn_if_unsettled · podpisuje dowolny portfel" disabled={busy} onClick={burn} />
           </>
         )}
-      </div>
+      </Card>
     );
   }
 
   if (!items.length && !dispute) return null;
   return (
-    <div className="panel">
-      <h3 data-ov="Operacje">Akcje</h3>
-      <fieldset disabled={busy} style={{ border: 0, padding: 0 }}>{items}</fieldset>
+    <>
+      {items.length > 0 && (
+        <Card icon={SealCheck} title="Akcje">
+          <fieldset disabled={busy} className="acts">{items}</fieldset>
+        </Card>
+      )}
       {dispute}
-    </div>
+    </>
   );
 }

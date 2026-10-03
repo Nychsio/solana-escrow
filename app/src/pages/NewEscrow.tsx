@@ -1,4 +1,5 @@
-import { Plus } from "lucide-react";
+import { ArrowRight, Plus } from "@phosphor-icons/react";
+import { Card, Hero } from "../components/ui";
 import { BN } from "@anchor-lang/core";
 import { TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync } from "@solana/spl-token";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
@@ -59,7 +60,12 @@ export function NewEscrow() {
     }
   }, [publicKey, mint, connection]);
 
-  if (!publicKey) return <p>Połącz portfel klienta, żeby utworzyć umowę.</p>;
+  if (!publicKey)
+    return (
+      <div className="page">
+        <Hero overline="Umowa escrow" lead="Połącz portfel klienta, żeby utworzyć umowę.">Nowa umowa</Hero>
+      </div>
+    );
 
   const submit = async () => {
     setFormError(null);
@@ -98,48 +104,51 @@ export function NewEscrow() {
   const plus = (secs: number) => setDeadline(toLocalInput(now + secs));
 
   return (
-    <div className="page form">
-      <h2 data-ov="Formularz">Nowa umowa</h2>
-      <p>
-        <label>Adres wykonawcy<br />
-          <input value={freelancer} onChange={(e) => setFreelancer(e.target.value)} size={50} />
-        </label>
-      </p>
-      <p>
-        <label>Token (mint)<br />
-          <input value={mint} onChange={(e) => setMint(e.target.value)} size={50} />
-        </label>
-        <br /><small>Twoje saldo: {balance ?? "?"}</small>
-      </p>
-      <p>
-        <label>Kwota (w tokenach)<br />
-          <input value={amount} onChange={(e) => setAmount(e.target.value)} />
-        </label>
-      </p>
-      <p>
-        <label>Termin dostawy<br />
-          <input type="datetime-local" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
-        </label>{" "}
-        <button onClick={() => plus(180)}>za 3 min (demo)</button>
-        <button onClick={() => plus(600)}>za 10 min</button>
-        <button onClick={() => plus(86400)}>za 24 h</button>
-      </p>
-      <p>
-        <label>Okno akceptacji{" "}
-          <select value={review} onChange={(e) => setReview(Number(e.target.value))}>
-            {REVIEW_PRESETS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-          </select>
-        </label>{" "}
-        <label>Okno sporu{" "}
-          <select value={dispute} onChange={(e) => setDispute(Number(e.target.value))}>
-            {DISPUTE_PRESETS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-          </select>
-        </label>
-      </p>
-      {formError && <p className="error">{formError}</p>}
-      <button className="primary" disabled={busy} onClick={submit}>
-        <Plus size={16} strokeWidth={2} />{busy ? "Wysyłanie…" : "Utwórz i wpłać do skarbca"}
-      </button>
+    <div className="page">
+      <Hero overline="Umowa escrow" lead="Wpłacasz kwotę do skarbca. Wypłaty pilnuje program, nie platforma.">Nowa umowa</Hero>
+      <Card icon={Plus} title="Warunki umowy">
+        <div className="fields">
+          <label className="field">Adres wykonawcy
+            <input value={freelancer} onChange={(e) => setFreelancer(e.target.value)} />
+          </label>
+          <label className="field">Token (mint)
+            <input value={mint} onChange={(e) => setMint(e.target.value)} />
+            <small>Twoje saldo: {balance ?? "?"}</small>
+          </label>
+          <label className="field">Kwota (w tokenach)
+            <input value={amount} onChange={(e) => setAmount(e.target.value)} />
+          </label>
+          <div className="field">
+            <label>Termin dostawy
+              <input type="datetime-local" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
+            </label>
+            <div className="row">
+              <button onClick={() => plus(180)}>za 3 min (demo)</button>
+              <button onClick={() => plus(600)}>za 10 min</button>
+              <button onClick={() => plus(86400)}>za 24 h</button>
+            </div>
+          </div>
+          <div className="field-pair">
+            <label className="field">Okno akceptacji
+              <select value={review} onChange={(e) => setReview(Number(e.target.value))}>
+                {REVIEW_PRESETS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+            </label>
+            <label className="field">Okno sporu
+              <select value={dispute} onChange={(e) => setDispute(Number(e.target.value))}>
+                {DISPUTE_PRESETS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+            </label>
+          </div>
+        </div>
+        {formError && <p className="error">{formError}</p>}
+        <div className="act">
+          <button className="primary" disabled={busy} onClick={submit}>
+            <Plus size={18} weight="bold" />{busy ? "Wysyłanie…" : "Utwórz i wpłać do skarbca"}<ArrowRight size={18} weight="bold" />
+          </button>
+          <span className="cap">create · podpisuje klient</span>
+        </div>
+      </Card>
     </div>
   );
 }

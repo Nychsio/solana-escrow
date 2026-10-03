@@ -1,4 +1,4 @@
-import { Check, ExternalLink, RefreshCw, X } from "lucide-react";
+import { ArrowSquareOut, ArrowsClockwise, CheckCircle, X, XCircle } from "@phosphor-icons/react";
 import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
 import { txUrl } from "./config";
 import { translateError } from "./errors";
@@ -22,7 +22,13 @@ const isExpired = (e: unknown) => {
 export function TxProvider({ children }: { children: ReactNode }) {
   const [busy, setBusy] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
-  const push = (t: Omit<Toast, "id">) => setToasts((l) => [{ ...t, id: Date.now() + Math.random() }, ...l]);
+  const dismiss = (id: number) => setToasts((l) => l.filter((x) => x.id !== id));
+  // Success and "retrying" toasts vanish after 8 s; errors stay until closed. At most 3 are shown.
+  const push = (t: Omit<Toast, "id">) => {
+    const id = Date.now() + Math.random();
+    setToasts((l) => [{ ...t, id }, ...l].slice(0, 3));
+    if (t.ok) setTimeout(() => dismiss(id), 8000);
+  };
 
   const run = useCallback(async (label: string, fn: () => Promise<string>) => {
     setBusy(true);
@@ -54,12 +60,26 @@ export function TxProvider({ children }: { children: ReactNode }) {
       <div className="toasts">
         {toasts.map((t) => (
           <div key={t.id} className={`toast ${t.info ? "info" : t.ok ? "ok" : "err"}`}>
-            <b>{t.info ? <RefreshCw className="spin" size={16} strokeWidth={2} /> : t.ok ? <Check size={16} strokeWidth={2} /> : <X size={16} strokeWidth={2} />}{t.label}</b>{" "}
-            {t.sig && (
-              <a href={txUrl(t.sig)} target="_blank" rel="noreferrer">Explorer<ExternalLink size={16} strokeWidth={2} /></a>
-            )}
-            {t.msg && <div>{t.msg}</div>}
-            <button onClick={() => setToasts((l) => l.filter((x) => x.id !== t.id))}aria-label="Zamknij"><X size={16} strokeWidth={2} /></button>
+            <span className="toast-badge">
+              {t.info ? (
+                <ArrowsClockwise className="spin" size={18} weight="bold" />
+              ) : t.ok ? (
+                <CheckCircle size={18} weight="bold" />
+              ) : (
+                <XCircle size={18} weight="bold" />
+              )}
+            </span>
+            <div className="toast-body">
+              <b>{t.label}</b>
+              {t.msg && <div>{t.msg}</div>}
+              {t.sig && (
+                <a href={txUrl(t.sig)} target="_blank" rel="noreferrer">
+                  Zobacz w Explorerze
+                  <ArrowSquareOut size={16} weight="duotone" />
+                </a>
+              )}
+            </div>
+            <button onClick={() => dismiss(t.id)} aria-label="Zamknij"><X size={16} weight="bold" /></button>
           </div>
         ))}
       </div>

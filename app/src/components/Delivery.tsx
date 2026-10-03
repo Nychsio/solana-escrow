@@ -1,10 +1,11 @@
-import { CircleCheck, CircleX, Upload } from "lucide-react";
+import { CheckCircle, Fingerprint, UploadSimple, XCircle } from "@phosphor-icons/react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useState } from "react";
 import { toHex } from "../format";
 import { stateOf, useProgram } from "../program";
 import type { EscrowView } from "../pages/EscrowPage";
 import { useTx } from "../tx";
+import { Act, Card, CopyIcon } from "./ui";
 
 // SHA-256 computed in the browser (Web Crypto). The file never leaves the machine;
 // only its 32-byte fingerprint goes on-chain.
@@ -17,7 +18,7 @@ function HashInput({ onHash }: { onHash: (h: Uint8Array | null, label: string) =
   const [text, setText] = useState("");
   const [err, setErr] = useState<string | null>(null);
   return (
-    <div>
+    <div className="hashinput">
       <input
         type="file"
         onChange={async (e) => {
@@ -37,7 +38,7 @@ function HashInput({ onHash }: { onHash: (h: Uint8Array | null, label: string) =
         }}
       />
       {err && <div className="error">{err}</div>}
-      <div>
+      <div className="textrow">
         albo tekst / link:{" "}
         <input value={text} size={40} onChange={(e) => setText(e.target.value)} />
         <button
@@ -83,40 +84,41 @@ export function Delivery({ pda, esc, now, role, reload }: EscrowView) {
 
   if (!canDeliver && !hasHash) return null;
   return (
-    <div className="panel">
+    <>
       {canDeliver && (
-        <>
-          <h3 data-ov="Wykonawca">Dostawa</h3>
+        <Card icon={UploadSimple} title="Dostawa">
           <p>Wybierz plik (albo wklej tekst/link). Na chain trafia tylko jego SHA-256.</p>
           <HashInput onHash={(h, label) => setHash(h ? { h, label } : null)} />
           {hash && (
-            <p>
-              {hash.label}: <code className="hash">{toHex(hash.h)}</code>
-              <br />
-              <button className="primary" disabled={busy} onClick={deliver}><Upload size={16} strokeWidth={2} />Zgłoś dostawę (mark_delivered)</button>
-            </p>
+            <div className="hash-result">
+              <p>
+                {hash.label}: <code className="hash">{toHex(hash.h)}</code>
+              </p>
+              <Act kind="primary" icon={UploadSimple} label="Zgłoś dostawę" caption="mark_delivered · podpisuje wykonawca" disabled={busy} onClick={deliver} />
+            </div>
           )}
-        </>
+        </Card>
       )}
       {hasHash && (
-        <>
-          <h3 data-ov="Klient">Weryfikacja dostawy</h3>
+        <Card icon={Fingerprint} title="Weryfikacja dostawy">
           <p>Wrzuć plik otrzymany od wykonawcy — porównamy jego hash z zapisanym on-chain.</p>
           <HashInput onHash={(h, label) => h && setCheck({ ok: toHex(h) === onChain, hex: toHex(h), label })} />
           {check && (
-            <p>
+            <div className="hash-result">
               {check.ok ? (
-                <b className="verdict ok"><CircleCheck size={16} strokeWidth={2} />Zgodny z hashem on-chain</b>
+                <b className="verdict ok"><CheckCircle size={20} weight="duotone" />Zgodny z hashem on-chain</b>
               ) : (
-                <b className="verdict bad"><CircleX size={16} strokeWidth={2} />NIEZGODNY z hashem on-chain</b>
+                <b className="verdict bad"><XCircle size={20} weight="duotone" />NIEZGODNY z hashem on-chain</b>
               )}{" "}
-              ({check.label})
-              <br />
-              <code className="hash">{check.hex}</code>
-            </p>
+              <span className="muted">({check.label})</span>
+              <div className="hash-line">
+                <code className="hash" title={check.hex}>{check.hex}</code>
+                <CopyIcon value={check.hex} label="Kopiuj hash" />
+              </div>
+            </div>
           )}
-        </>
+        </Card>
       )}
-    </div>
+    </>
   );
 }

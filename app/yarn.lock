@@ -81,6 +81,11 @@
   resolved "https://registry.yarnpkg.com/@oxc-project/types/-/types-0.152.0.tgz#643ff80ce7aacea025f859f13b60cbb42ae0a613"
   integrity sha512-oM/5rLBm2tPkg0iBgkH/FOeR3PCDpY19GTgAZjMFM8h9WI9VW7cLgzp6nwtarYKmovavIQZ+Fe/RKX/8C8O/Rw==
 
+"@phosphor-icons/react@^2.1.10":
+  version "2.1.10"
+  resolved "https://registry.yarnpkg.com/@phosphor-icons/react/-/react-2.1.10.tgz#3a97ec5b7a4b8d53afeb29125bc17e74ed2daf92"
+  integrity sha512-vt8Tvq8GLjheAZZYa+YG/pW7HDbov8El/MANW8pOAz4eGxrwhnbfrQZq0Cp4q8zBEu8NIhHdnr+r8thnfRSNYA==
+
 "@react-native-async-storage/async-storage@^1.17.7":
   version "1.24.0"
   resolved "https://registry.yarnpkg.com/@react-native-async-storage/async-storage/-/async-storage-1.24.0.tgz#888efbc62a26f7d9464b32f4d3027b7f2771999b"
@@ -1400,11 +1405,6 @@ locate-path@^5.0.0:
   dependencies:
     p-locate "^4.1.0"
 
-lucide-react@^1.51.0:
-  version "1.51.0"
-  resolved "https://registry.yarnpkg.com/lucide-react/-/lucide-react-1.51.0.tgz#b4f828d2ac31a5ccc29adc139bb80b036ca58d0c"
-  integrity sha512-9929jimol5y7VbXUlVKcgURMSeIxFJB7dtWCkRAaNnF7KiCRkSkhmqWPUmAmUFYPezNawFk6qvz3Mu0gEnfI4g==
-
 merge-options@^3.0.4:
   version "3.0.4"
   resolved "https://registry.yarnpkg.com/merge-options/-/merge-options-3.0.4.tgz#84709c2aa2a4b24c1981f66c179fe5565cc6dbb7"
@@ -1570,6 +1570,11 @@ set-blocking@^2.0.0:
   version "2.0.0"
   resolved "https://registry.yarnpkg.com/set-blocking/-/set-blocking-2.0.0.tgz#045f9782d011ae9a6803ddd382b24392b3d890f7"
   integrity sha512-KiKBS8AnWGEyLzofFfmvKwpdPzqiy16LvQfK3yv/fVH7Bj13/wl3JSR1J+rfgRE9q7xUJK4qvgS8raSOeLUehw==
+
+simple-icons@^16.33.0:
+  version "16.33.0"
+  resolved "https://registry.yarnpkg.com/simple-icons/-/simple-icons-16.33.0.tgz#8e61de17609aa5d72a5592142d08a7dbcefa1d37"
+  integrity sha512-z14u6A8ngAg9mgERRsNO8YkjIMefehIpBk7A8Dz3Gd91945qFP19MLPSHgV4z8P5u/MRYd5e07OTzaDoB4d6qA==
 
 source-map-js@^1.2.1:
   version "1.2.2"
