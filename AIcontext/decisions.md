@@ -21,6 +21,9 @@ Format: `data | decyzja | dlaczego | kto`
 2026-10-03 | accept_settlement wymaga podania bps zgodnego z zapisanym | ochrona przed podmianą propozycji tuż przed akceptacją | Piotr
 2026-10-03 | Seedy podpisu PDA w jednym miejscu (Escrow::with_signer_seeds), używane przez wypłaty i spalenie | jedna ścieżka podpisu skarbca | Claude Code
 2026-10-03 | Research mechanizmu sporu (zamiast Frozen) przez Gemini + analiza Claude; kierunek: ugoda dwustronna + publiczny burn po oknie, bez arbitra (Kleros/UMA odrzucone: pośrednik rozproszony) | Frozen blokuje środki na zawsze i pozwala grieferować; wybór wariantu decay: OTWARTE | Piotr / Claude
+2026-10-03 | Deploy na devnet z upgrade authority zostającym przy portfelu deweloperskim | odebranie dopiero przy code freeze po frontendzie, żeby dało się jeszcze poprawiać program | Piotr
+2026-10-03 | Skrypty demo w scripts/ uruchamiane przez ts-node z osobnym scripts/tsconfig.json (ES2020) | BigInt i nowsze API; główny tsconfig (ES6) obsługuje testy | Claude Code
+2026-10-03 | Portfele demo i mint w .demo-keys/ (poza gitem), setup idempotentny | powtarzalne demo bez kluczy w repo | Piotr
 
 ## Użyte komponenty zewnętrzne (disclosure)
 - Solana (devnet), Solana CLI
@@ -31,3 +34,4 @@ Format: `data | decyzja | dlaczego | kto`
 - Rust 1.89.0 (rust-toolchain.toml), Solana CLI (Agave) 3.1.10, Anchor CLI 1.1.2
 - Surfpool 1.6.0 (lokalny walidator uruchamiany przez `anchor test`)
 - Gemini (research mechanizmów sporu, bez generowania kodu)
+- ts-node (uruchamianie skryptów demo), Solana Explorer (linki do transakcji)

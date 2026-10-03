@@ -6,7 +6,19 @@ Escrow dla zleceń freelancerskich **bez arbitra**, na Solanie (Anchor). Warunki
 
 Zaimplementowana pełna logika escrow: `create`, `mark_delivered`, `release`, `claim_if_silent`, `refund_if_late`, `reject` oraz rozstrzyganie sporów bez arbitra: `propose_settlement`, `accept_settlement`, `burn_if_unsettled`.
 
-Jeszcze nie zrobione: deploy na devnet, frontend.
+Program jest wdrożony na devnecie. Jeszcze nie zrobione: frontend, odebranie upgrade authority.
+
+## Devnet
+
+- ID programu: `6KsiGDi8o9E1qNWxpzdew2CkDyQFqfeoLs79fAJ457D8`
+- Explorer: https://explorer.solana.com/address/6KsiGDi8o9E1qNWxpzdew2CkDyQFqfeoLs79fAJ457D8?cluster=devnet
+- Przykładowa ścieżka na żywo (`create` → `mark_delivered` → `release`):
+  1. [create](https://explorer.solana.com/tx/4vtA1tyVpj2WcXswcrtLbS3rA4DHYuSGbEcca2Lp4CH9tjVZJyuEgM3SZykSS16s3jGxPpkWDRwjPbkqNiz5N15x?cluster=devnet)
+  2. [mark_delivered](https://explorer.solana.com/tx/4vZTgExKryd4DLCHEEpAAyTLfV6toHwfRDhWr3gxwSjzcE6ZNgaw43uYcE2czqvevB2ChSreRMWnHur3EtaGpvVJ?cluster=devnet)
+  3. [release](https://explorer.solana.com/tx/22SMCBLmdiXFqzDTjT4ZgQaC4e5BvkR2rtJH5HG1iMTTXz7EMgpHsUgAeheHXzeEz8wAhatkPmDJ9sUiiHVjg?cluster=devnet)
+- Upgrade authority jest na razie przy portfelu deweloperskim; zostanie odebrane przy code freeze (`solana program set-upgrade-authority --final`).
+
+Powtórzenie demo na devnecie: `yarn demo:setup` (portfele i mint w `.demo-keys/`, poza gitem), potem `yarn demo:flow` (wypisuje linki do Explorera).
 
 ## Co gdzie leży
 
@@ -19,6 +31,7 @@ Jeszcze nie zrobione: deploy na devnet, frontend.
 | `programs/escrow/src/instructions/delivery.rs` | `mark_delivered`, `reject` |
 | `programs/escrow/src/instructions/dispute.rs` | `propose_settlement`, `accept_settlement`, `burn_if_unsettled` |
 | `programs/escrow/src/instructions/payout.rs` | `release`, `claim_if_silent`, `refund_if_late` oraz `pay_from_vault` (jedyna funkcja wypłacająca ze skarbca) |
+| `scripts/` | Skrypty demo na devnecie: `demo-setup.ts` (portfele, mint, tokeny), `demo-flow.ts` (create → mark_delivered → release) |
 | `tests/escrow.ts` | Testy wszystkich ścieżek na localnecie |
 | `Anchor.toml` | Konfiguracja workspace'u Anchor (klaster, portfel, skrypt testowy) |
 | `migrations/deploy.ts` | Szablonowy skrypt deployu z `anchor init` (pusty) |
