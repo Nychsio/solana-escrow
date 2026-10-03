@@ -1,0 +1,91 @@
+import { useWallet } from "@solana/wallet-adapter-react";
+import { useState } from "react";
+import { toHex } from "../format";
+import { stateOf, useProgram } from "../program";
+import type { EscrowView } from "../pages/EscrowPage";
+import { useTx } from "../tx";
+
+// SHA-256 computed in the browser (Web Crypto). The file never leaves the machine;
+// only its 32-byte fingerprint goes on-chain.
+async function sha256(data: ArrayBuffer | string): Promise<Uint8Array> {
+  const bytes = typeof data === "string" ? new TextEncoder().encode(data) : new Uint8Array(data);
+  return new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+}
+
+function HashInput({ onHash }: { onHash: (h: Uint8Array | null, label: string) => void }) {
+  const [text, setText] = useState("");
+  return (
+    <div>
+      <input
+        type="file"
+        onChange={async (e) => {
+          const f = e.target.files?.[0];
+          if (f) onHash(await sha256(await f.arrayBuffer()), f.name);
+        }}
+      />
+      <div>
+        albo tekst / link:{" "}
+        <input value={text} size={40} onChange={(e) => setText(e.target.value)} />
+        <button disabled={!text} onClick={async () => onHash(await sha256(text), "tekst")}>Policz hash</button>
+      </div>
+    </div>
+  );
+}
+
+export function Delivery({ pda, esc, now, role, reload }: EscrowView) {
+  const program = useProgram();
+  const { publicKey } = useWallet();
+  const { busy, run } = useTx();
+  const [hash, setHash] = useState<{ h: Uint8Array; label: string } | null>(null);
+  const [check, setCheck] = useState<{ ok: boolean; hex: string; label: string } | null>(null);
+
+  const state = stateOf(esc);
+  const onChain = toHex(esc.deliverableHash);
+  const hasHash = /[1-9a-f]/.test(onChain);
+  const canDeliver = role === "freelancer" && state === "funded" && now <= esc.deadlineTs.toNumber();
+
+  const deliver = async () => {
+    if (!hash || !publicKey) return;
+    const sig = await run(`Zgłoszenie dostawy (mark_delivered): ${hash.label}`, () =>
+      program.methods
+        .markDelivered(Array.from(hash.h))
+        .accountsPartial({ freelancer: publicKey, escrow: pda })
+        .rpc()
+    );
+    if (sig) await reload();
+  };
+
+  if (!canDeliver && !hasHash) return null;
+  return (
+    <div className="panel">
+      {canDeliver && (
+        <>
+          <h3>Dostawa</h3>
+          <p>Wybierz plik (albo wklej tekst/link). Na chain trafia tylko jego SHA-256.</p>
+          <HashInput onHash={(h, label) => setHash(h ? { h, label } : null)} />
+          {hash && (
+            <p>
+              {hash.label}: <code className="hash">{toHex(hash.h)}</code>
+              <br />
+              <button disabled={busy} onClick={deliver}>Zgłoś dostawę (mark_delivered)</button>
+            </p>
+          )}
+        </>
+      )}
+      {hasHash && (
+        <>
+          <h3>Weryfikacja dostawy</h3>
+          <p>Wrzuć plik otrzymany od wykonawcy — porównamy jego hash z zapisanym on-chain.</p>
+          <HashInput onHash={(h, label) => h && setCheck({ ok: toHex(h) === onChain, hex: toHex(h), label })} />
+          {check && (
+            <p>
+              {check.ok ? "✅ Zgodny z hashem on-chain" : "❌ NIEZGODNY z hashem on-chain"} ({check.label})
+              <br />
+              <code className="hash">{check.hex}</code>
+            </p>
+          )}
+        </>
+      )}
+    </div>
+  );
+}

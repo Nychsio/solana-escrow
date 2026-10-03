@@ -3,6 +3,7 @@ import { PublicKey } from "@solana/web3.js";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Actions } from "../components/Actions";
 import { Addr } from "../components/Addr";
+import { Delivery } from "../components/Delivery";
 import { txUrl } from "../config";
 import { countdown, fmtDate, fromBase, toHex } from "../format";
 import { stateOf, useChainNow, useProgram, vaultOf, type EscrowAccount } from "../program";
@@ -140,6 +141,7 @@ export function EscrowPage({ address }: { address: string }) {
         </tbody>
       </table>
 
+      <Delivery {...view} />
       <Actions {...view} />
 
       <h3>Historia transakcji</h3>
