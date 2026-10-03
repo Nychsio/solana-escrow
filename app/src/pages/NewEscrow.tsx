@@ -11,12 +11,14 @@ import { useTx } from "../tx";
 
 const REVIEW_PRESETS = [
   [120, "2 min (demo)"],
+  [300, "5 min"],
   [86400, "24 h"],
   [3 * 86400, "3 dni"],
   [7 * 86400, "7 dni"],
 ] as const;
 const DISPUTE_PRESETS = [
   [120, "2 min (demo)"],
+  [300, "5 min"],
   [86400, "24 h"],
   [3 * 86400, "3 dni"],
   [7 * 86400, "7 dni"],

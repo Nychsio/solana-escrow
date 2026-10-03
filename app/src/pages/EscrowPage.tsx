@@ -9,7 +9,7 @@ import { txUrl } from "../config";
 import { countdown, fmtDate, fromBase, toHex } from "../format";
 import { stateOf, useChainNow, useProgram, vaultOf, type EscrowAccount, type StateName } from "../program";
 
-type HistItem = { sig: string; ok: boolean; time: number | null; ix: string };
+type HistItem = { sig: string; ok: boolean; time: number | null; ix: string; closes: boolean };
 
 // Friendlier names for instructions whose log name alone is unclear.
 const IX_LABELS: Record<string, string> = { CancelByFreelancer: "Rezygnacja wykonawcy (CancelByFreelancer)" };
@@ -43,49 +43,65 @@ export function EscrowPage({ address }: { address: string }) {
   const [history, setHistory] = useState<HistItem[]>([]);
   const [closed, setClosed] = useState(false);
 
-  const loadAccount = useCallback(async () => {
-    if (!pda) return;
-    try {
-      const e = await program.account.escrow.fetch(pda);
-      setEsc(e);
-      setError(null);
-      const bal = await connection.getTokenAccountBalance(vaultOf(e.mint, pda)).catch(() => null);
-      setVaultBal(bal ? bal.value.uiAmountString ?? "0" : null);
-    } catch (e) {
-      // A closed escrow (close_escrow) no longer exists on chain: decide by the account
-      // lookup, not by the error text.
-      const info = await connection.getAccountInfo(pda).catch(() => undefined);
-      if (info === null) {
-        setClosed(true);
-        setEsc(null);
-        setError(null);
-      } else {
-        setError(`Nie znaleziono umowy pod tym adresem (${(e as Error).message})`);
-      }
-    }
-  }, [pda, program, connection]);
-
   // Transaction history read straight from the chain: signatures of the escrow account,
-  // instruction name taken from the program logs.
-  const loadHistory = useCallback(async () => {
-    if (!pda) return;
+  // instruction name taken from the program logs. `closes` = some log line says CloseEscrow.
+  const fetchHistory = useCallback(async (): Promise<HistItem[]> => {
+    if (!pda) return [];
     const sigs = await connection.getSignaturesForAddress(pda, { limit: 25 });
     const txs = await connection.getTransactions(
       sigs.map((s) => s.signature),
       { maxSupportedTransactionVersion: 0, commitment: "confirmed" }
     );
-    setHistory(
-      sigs.map((s, i) => ({
+    return sigs.map((s, i) => {
+      const logs = txs[i]?.meta?.logMessages ?? [];
+      return {
         sig: s.signature,
         ok: !s.err,
         time: s.blockTime ?? null,
-        ix:
-          txs[i]?.meta?.logMessages
-            ?.map((l) => l.match(/^Program log: Instruction: (\w+)/)?.[1])
-            .find(Boolean) ?? "?",
-      }))
-    );
+        ix: logs.map((l) => l.match(/^Program log: Instruction: (\w+)/)?.[1]).find(Boolean) ?? "?",
+        closes: !s.err && logs.some((l) => l.includes("Instruction: CloseEscrow")),
+      };
+    });
   }, [pda, connection]);
+
+  const loadHistory = useCallback(async () => {
+    setHistory(await fetchHistory());
+  }, [fetchHistory]);
+
+  // Right after `create` the RPC may not see the account yet. "Closed" is claimed only when
+  // the history contains a CloseEscrow; otherwise re-read (3 retries, 2 s apart).
+  const loadAccount = useCallback(async () => {
+    if (!pda) return;
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const e = await program.account.escrow.fetch(pda);
+        setEsc(e);
+        setError(null);
+        const bal = await connection.getTokenAccountBalance(vaultOf(e.mint, pda)).catch(() => null);
+        setVaultBal(bal ? bal.value.uiAmountString ?? "0" : null);
+        return;
+      } catch (e) {
+        const info = await connection.getAccountInfo(pda).catch(() => undefined);
+        if (info !== null) {
+          setError(`Nie znaleziono umowy pod tym adresem (${(e as Error).message})`);
+          return;
+        }
+        const hist = await fetchHistory().catch(() => [] as HistItem[]);
+        if (hist.some((h) => h.closes)) {
+          setHistory(hist);
+          setClosed(true);
+          setEsc(null);
+          setError(null);
+          return;
+        }
+        if (attempt >= 3) {
+          setError(`Nie znaleziono umowy pod tym adresem (${(e as Error).message})`);
+          return;
+        }
+        await new Promise((r) => setTimeout(r, 2000));
+      }
+    }
+  }, [pda, program, connection, fetchHistory]);
 
   const reload = useCallback(async () => {
     await loadAccount();
