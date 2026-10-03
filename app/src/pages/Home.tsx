@@ -49,10 +49,10 @@ export function Home() {
   }, [load]);
 
   return (
-    <div>
+    <div className="page">
       {publicKey ? (
         <>
-          <h2>Moje umowy</h2>
+          <h2 data-ov="Panel">Moje umowy</h2>
           <button disabled={tab === "client"} onClick={() => setTab("client")}>Jako klient</button>
           <button disabled={tab === "freelancer"} onClick={() => setTab("freelancer")}>Jako wykonawca</button>
           <button onClick={() => load()}>Odśwież</button>{" "}
@@ -72,7 +72,7 @@ export function Home() {
                   return (
                     <tr key={pda.toBase58()}>
                       <td><Addr value={(tab === "client" ? esc.freelancer : esc.client).toBase58()} /></td>
-                      <td>{fromBase(esc.amount)}</td>
+                      <td className="mono">{fromBase(esc.amount)}</td>
                       <td><span className={`state s-${stateOf(esc)}`}>{stateOf(esc)}</span></td>
                       <td>{d ? countdown(d - now) : "—"}</td>
                       <td><a href={`#/escrow/${pda.toBase58()}`}>szczegóły</a></td>
@@ -86,7 +86,7 @@ export function Home() {
       ) : (
         <p>Połącz portfel (Phantom/Solflare ustawiony na devnet), żeby zobaczyć swoje umowy.</p>
       )}
-      <h3>Otwórz umowę po adresie</h3>
+      <h3 data-ov="Szybki dostęp">Otwórz umowę po adresie</h3>
       <input placeholder="Adres umowy (PDA)" value={addr} onChange={(e) => setAddr(e.target.value)} size={50} />
       <button onClick={() => (location.hash = `#/escrow/${addr.trim()}`)} disabled={!addr.trim()}>Otwórz</button>
     </div>

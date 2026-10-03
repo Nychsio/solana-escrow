@@ -137,7 +137,7 @@ export function Actions({ pda, esc, now, role, reload, vaultBal }: EscrowView) {
     const fl = rest.muln(esc.settleBps).divn(10000);
     dispute = (
       <div className="panel">
-        <h4>Spór: ugoda albo spalenie</h4>
+        <h4 data-ov="Spór">Ugoda albo spalenie</h4>
         <p>
           Aktualna propozycja:{" "}
           {proposer === 0
@@ -175,7 +175,7 @@ export function Actions({ pda, esc, now, role, reload, vaultBal }: EscrowView) {
   if (!items.length && !dispute) return null;
   return (
     <div className="panel">
-      <h3>Akcje</h3>
+      <h3 data-ov="Operacje">Akcje</h3>
       <fieldset disabled={busy} style={{ border: 0, padding: 0 }}>{items}</fieldset>
       {dispute}
     </div>

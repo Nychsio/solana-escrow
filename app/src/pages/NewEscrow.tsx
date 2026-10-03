@@ -95,8 +95,8 @@ export function NewEscrow() {
   const plus = (secs: number) => setDeadline(toLocalInput(now + secs));
 
   return (
-    <div>
-      <h2>Nowa umowa</h2>
+    <div className="page form">
+      <h2 data-ov="Formularz">Nowa umowa</h2>
       <p>
         <label>Adres wykonawcy<br />
           <input value={freelancer} onChange={(e) => setFreelancer(e.target.value)} size={50} />

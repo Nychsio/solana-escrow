@@ -85,7 +85,7 @@ export function Delivery({ pda, esc, now, role, reload }: EscrowView) {
     <div className="panel">
       {canDeliver && (
         <>
-          <h3>Dostawa</h3>
+          <h3 data-ov="Wykonawca">Dostawa</h3>
           <p>Wybierz plik (albo wklej tekst/link). Na chain trafia tylko jego SHA-256.</p>
           <HashInput onHash={(h, label) => setHash(h ? { h, label } : null)} />
           {hash && (
@@ -99,7 +99,7 @@ export function Delivery({ pda, esc, now, role, reload }: EscrowView) {
       )}
       {hasHash && (
         <>
-          <h3>Weryfikacja dostawy</h3>
+          <h3 data-ov="Klient">Weryfikacja dostawy</h3>
           <p>Wrzuć plik otrzymany od wykonawcy — porównamy jego hash z zapisanym on-chain.</p>
           <HashInput onHash={(h, label) => h && setCheck({ ok: toHex(h) === onChain, hex: toHex(h), label })} />
           {check && (

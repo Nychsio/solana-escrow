@@ -102,13 +102,14 @@ export function EscrowPage({ address }: { address: string }) {
   if (!pda) return <p>Nieprawidłowy adres umowy.</p>;
   if (closed)
     return (
-      <div>
-        <h2>Umowa <Addr value={pda.toBase58()} /></h2>
+      <div className="page">
+        <h2 data-ov="Escrow">Umowa <Addr value={pda.toBase58()} /></h2>
         <p><b>Umowa zamknięta, rent zwrócony klientowi.</b></p>
         <p><a href="#/">← Lista umów</a></p>
-        <h3>Historia transakcji</h3>
+        <hr className="glass-separator" />
+        <h3 data-ov="Chain">Historia transakcji</h3>
         <button onClick={() => loadHistory()}>Odśwież</button>
-        <ul>
+        <ul className="history">
           {history.map((h) => (
             <li key={h.sig}>
               {h.time ? fmtDate(h.time) : "?"} · <b>{h.ix}</b> {h.ok ? "" : "(błąd)"} ·{" "}
@@ -133,17 +134,17 @@ export function EscrowPage({ address }: { address: string }) {
   const view: EscrowView = { pda, esc, now, role, reload, vaultBal };
 
   return (
-    <div>
-      <h2>Umowa <Addr value={pda.toBase58()} /></h2>
+    <div className="page">
+      <h2 data-ov="Escrow">Umowa <Addr value={pda.toBase58()} /></h2>
       <p>
         Link dla drugiej strony:{" "}
-        <code className="hash" onClick={() => navigator.clipboard.writeText(location.href)}>{location.href}</code>
+        <code className="hash mono" onClick={() => navigator.clipboard.writeText(location.href)}>{location.href}</code>
       </p>
       <p>
         Twoja rola: <b>{role === "client" ? "klient" : role === "freelancer" ? "wykonawca" : "obserwator"}</b>
       </p>
 
-      <h3>Stan: <span className={`state s-${state}`}>{state.toUpperCase()}</span></h3>
+      <h3 data-ov="Status">Stan: <span className={`state s-${state}`}>{state.toUpperCase()}</span></h3>
       <div className="timeline">
         {STATES.map((s) => (
           <span key={s} className={`chip s-${s}${s === state ? " current" : ""}`}>{s}</span>
@@ -155,8 +156,8 @@ export function EscrowPage({ address }: { address: string }) {
           <tr><td>Klient</td><td><Addr value={esc.client.toBase58()} /></td></tr>
           <tr><td>Wykonawca</td><td><Addr value={esc.freelancer.toBase58()} /></td></tr>
           <tr><td>Token</td><td><Addr value={esc.mint.toBase58()} /></td></tr>
-          <tr><td>Kwota umowy</td><td>{fromBase(esc.amount)}</td></tr>
-          <tr><td>Saldo skarbca (na żywo)</td><td>{vaultBal ?? "?"} <Addr value={vaultOf(esc.mint, pda).toBase58()} /></td></tr>
+          <tr><td>Kwota umowy</td><td className="mono">{fromBase(esc.amount)}</td></tr>
+          <tr><td>Saldo skarbca (na żywo)</td><td className="mono">{vaultBal ?? "?"} <Addr value={vaultOf(esc.mint, pda).toBase58()} /></td></tr>
           <tr>
             <td>Termin dostawy</td>
             <td>{fmtDate(deadline)} {state === "funded" && <b>({countdown(deadline - now)})</b>}</td>
@@ -182,9 +183,10 @@ export function EscrowPage({ address }: { address: string }) {
       <Delivery {...view} />
       <Actions {...view} />
 
-      <h3>Historia transakcji</h3>
+      <hr className="glass-separator" />
+      <h3 data-ov="Chain">Historia transakcji</h3>
       <button onClick={() => loadHistory()}>Odśwież</button>
-      <ul>
+      <ul className="history">
         {history.map((h) => (
           <li key={h.sig}>
             {h.time ? fmtDate(h.time) : "?"} · <b>{h.ix}</b> {h.ok ? "" : "(błąd)"} ·{" "}
