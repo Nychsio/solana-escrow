@@ -12,13 +12,18 @@ Program jest wdrożony na devnecie (wersja z decay i `close_escrow`). Jeszcze ni
 
 - ID programu: `6KsiGDi8o9E1qNWxpzdew2CkDyQFqfeoLs79fAJ457D8`
 - Explorer: https://explorer.solana.com/address/6KsiGDi8o9E1qNWxpzdew2CkDyQFqfeoLs79fAJ457D8?cluster=devnet
-- Przykładowa ścieżka na żywo (`create` → `mark_delivered` → `release`):
-  1. [create](https://explorer.solana.com/tx/4vtA1tyVpj2WcXswcrtLbS3rA4DHYuSGbEcca2Lp4CH9tjVZJyuEgM3SZykSS16s3jGxPpkWDRwjPbkqNiz5N15x?cluster=devnet)
-  2. [mark_delivered](https://explorer.solana.com/tx/4vZTgExKryd4DLCHEEpAAyTLfV6toHwfRDhWr3gxwSjzcE6ZNgaw43uYcE2czqvevB2ChSreRMWnHur3EtaGpvVJ?cluster=devnet)
-  3. [release](https://explorer.solana.com/tx/22SMCBLmdiXFqzDTjT4ZgQaC4e5BvkR2rtJH5HG1iMTTXz7EMgpHsUgAeheHXzeEz8wAhatkPmDJ9sUiiHVjg?cluster=devnet)
+- Wdrożona wersja = kod z commita `d8a5207` (decay w ugodzie, `close_escrow`); [transakcja upgrade'u]( https://explorer.solana.com/tx/mCRuYedtKyH6Wv5BZb4EBSWTCVxGRvB3T5xYb8VrDSCyA97xzD1BbDT5WzhXyaLTCGjtCscZWcC4NbQvTDhU1kJ?cluster=devnet ). Bajty programu na łańcuchu są identyczne z `target/deploy/escrow.so` z tego commita.
+- Ścieżka akceptacji (`yarn demo:flow`): [create](https://explorer.solana.com/tx/64342DqfyBnGaGXxXoFtr8Z7i5retakZ4jtKZHZo9uuVcB7odaf22getZWkMVfKUkzyfMzUkCDWb5kLkvsScg6sP?cluster=devnet) → [mark_delivered](https://explorer.solana.com/tx/5qUfyvZUpm2mKnkSoN6wdENvChr1Piv4CNB24pwDn7WqcJBVmSN1x3o1CzBJrm6WVmqJkcZvMLhjkSyiuHVuxiuf?cluster=devnet) → [release](https://explorer.solana.com/tx/39niP11eh279x6AKH3mm2cZgZsV4d1Xc54CWEZ7bW6gdMjYcnGT2QVGncJHjST1Kn6JB6zp8BeT2WCte9HeGtZC7?cluster=devnet)
+- Ścieżka sporu (`yarn demo:dispute`): create → mark_delivered → reject → propose → accept (z decay, w przykładzie spalone 38,3%) → close_escrow (zwrot rentu):
+  1. [create](https://explorer.solana.com/tx/UNH8SnddpXu6QJQrmdkRnxgpRM4YMGf245nVMXHEAiG35CB6QHSp5YJU2GqXT9xxDS6aYqcjnHop2WS2EUN3pve?cluster=devnet)
+  2. [mark_delivered](https://explorer.solana.com/tx/57fPePGf6Qi158QyQnER6iKxQ19wiuQ3KnU4CUdVHAH5GeB2ZaTEBNuVSTHBvHSX3jEvXaiu3UB49j9ncZtvK2LH?cluster=devnet)
+  3. [reject](https://explorer.solana.com/tx/2vXZ6SGqTdKDSCKLgdhEQq8pKZQBWpTfhaUMkatEDC6zesYfMKGwk7cpJMKUtw3MBqxQN1CnZ1UiTZHYwJ8WoqH6?cluster=devnet)
+  4. [propose_settlement](https://explorer.solana.com/tx/5Yumo4y39KkFRjeKG6voiqLX1ycqQmxHRm5CiLvMdkiCH6N46ordpGpb4RVKsCdQLjjvFrrqtztw65bmScTaqNgo?cluster=devnet)
+  5. [accept_settlement](https://explorer.solana.com/tx/3LA8NQCbvHaGa4uPrhbAAE1BJgqJZJfBqmQ2mMzyfEPF2vD4s5K7NJcbsrhbB7rUQ1gZduR8kH8dCVV6RpQuv3cp?cluster=devnet)
+  6. [close_escrow](https://explorer.solana.com/tx/D3dSe63QmgjpJXJWughKLeZv33ztXzzBK6cXPG5FRhBTDag81w7iktEsyQQ6pVQUHhcCrjapUidRHYB1TKpshNj?cluster=devnet)
 - Upgrade authority jest na razie przy portfelu deweloperskim; zostanie odebrane przy code freeze (`solana program set-upgrade-authority --final`).
 
-Powtórzenie demo na devnecie: `yarn demo:setup` (portfele i mint w `.demo-keys/`, poza gitem), potem `yarn demo:flow` (wypisuje linki do Explorera).
+Powtórzenie demo na devnecie: `yarn demo:setup` (portfele i mint w `.demo-keys/`, poza gitem), potem `yarn demo:flow` i `yarn demo:dispute` (wypisują linki do Explorera i sprawdzają statusy przez RPC).
 
 ## Co gdzie leży
 

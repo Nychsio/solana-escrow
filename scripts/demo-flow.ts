@@ -16,6 +16,7 @@ import {
   loadKeypair,
   readMint,
   txLink,
+  verifySignatures,
 } from "./common";
 import * as common from "./common";
 import { Escrow } from "../target/types/escrow";
@@ -107,6 +108,12 @@ async function main() {
   console.log("\nstate             ", Object.keys(state)[0]);
   console.log("vault balance     ", (await getAccount(connection, vault)).amount.toString());
   console.log("freelancer gained ", (after - before).toString());
+
+  await verifySignatures({
+    create: createSig,
+    mark_delivered: deliveredSig,
+    release: releaseSig,
+  });
 }
 
 main().catch((err) => {

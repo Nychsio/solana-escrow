@@ -23,6 +23,13 @@
 ## Blokery
 - Brak.
 
+## Upgrade na devnecie (2026-10-03, na znak Piotra)
+- Devnet = kod z `d8a5207` (decay w `accept_settlement`, `close_escrow`). Bajty programu na łańcuchu mają ten sam SHA-256 co `target/deploy/escrow.so` (`ce8b5d79…260c`); program ma 311 976 B (było 291 952 B, `solana program extend` o 20 024 B).
+- Upgrade authority nadal przy portfelu dev `2uKvpTL9ErJLNaL1HYa3oMfFBECNZQVQDpqqdUySKx3a` (NIE odebrane). Slot upgrade'u 507079159.
+- Saldo portfela dev: **przed 3,396482 SOL**, po `extend` 3,294755, po upgrade'ie 3,291586 (koszt netto ok. 0,105 SOL: rent rozszerzenia 0,1017 plus opłaty; bufor zwrócony), po `demo:flow` i `demo:dispute` 3,288188 SOL. Brak osieroconych buforów.
+- `yarn demo:flow` i `yarn demo:dispute` przeszły na devnecie: 3 + 6 transakcji `finalized` (linki w README). W sporze accept po ok. 23 s z okna 60 s spalił 38,3% (38,333333 ze 100 tokenów), reszta podzielona 70/30 (43,166666 / 18,500001), `close_escrow` zwrócił 3 373 120 lamportów rentu (netto 3 368 120 po opłacie 5000).
+- Frontend (`cf98649`) ma już nowy IDL i typy w `app/src/idl/` (zgodne bajt w bajt z buildem).
+
 ## Devnet: portfel i upgrade authority
 - Portfel deweloperski `2uKvpTL9ErJLNaL1HYa3oMfFBECNZQVQDpqqdUySKx3a` = upgrade authority programu (NIE odebrane, do code freeze). Klucz w `~/.config/solana/id.json`, poza gitem.
 - Saldo: 2,5 SOL przed deployem, 1,0006 SOL po deployu, 0,8965 SOL po `demo:setup` i `demo:flow`. Deploy kosztował ok. 1,5 SOL (rent konta programu 1,484 SOL).

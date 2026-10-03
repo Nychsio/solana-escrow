@@ -45,3 +45,31 @@ export const writeMint = (mint: PublicKey) =>
 
 export const txLink = (signature: string) =>
   `https://explorer.solana.com/tx/${signature}?cluster=devnet`;
+
+// Re-reads every signature from the RPC and fails unless all succeeded.
+export const verifySignatures = async (sigs: Record<string, string>) => {
+  const names = Object.keys(sigs);
+  const { value } = await connection.getSignatureStatuses(
+    names.map((n) => sigs[n]),
+    { searchTransactionHistory: true }
+  );
+  console.log("\nstatus check via RPC:");
+  names.forEach((name, i) => {
+    const status = value[i];
+    const ok =
+      !!status &&
+      status.err === null &&
+      (status.confirmationStatus === "confirmed" ||
+        status.confirmationStatus === "finalized");
+    console.log(`  ${name.padEnd(16)} ${ok ? "OK" : "FAILED"} (${status?.confirmationStatus ?? "not found"})`);
+    if (!ok) throw new Error(`transaction ${name} did not succeed`);
+  });
+};
+
+export const feeOf = async (signature: string): Promise<number> => {
+  const tx = await connection.getTransaction(signature, {
+    commitment: "confirmed",
+    maxSupportedTransactionVersion: 0,
+  });
+  return tx!.meta!.fee;
+};

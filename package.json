@@ -8,7 +8,8 @@
     "demo:keys": "ts-node -P scripts/tsconfig.json scripts/export-keys.ts",
     "app:install": "yarn --cwd app install",
     "app:dev": "yarn --cwd app dev",
-    "app:build": "yarn --cwd app build"
+    "app:build": "yarn --cwd app build",
+    "demo:dispute": "ts-node -P scripts/tsconfig.json scripts/demo-dispute.ts"
   },
   "dependencies": {
     "@anchor-lang/core": "1.1.2"

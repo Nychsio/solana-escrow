@@ -122,7 +122,7 @@ Po każdym działającym kroku commit.
 Odebranie upgrade authority (`solana program set-upgrade-authority 6KsiG… --final`), README, PDF, wideo, zgłoszenie.
 
 ## Zmiany IDL po zadaniu 5
-Dotyczą lokalnego programu; **devnet ma jeszcze starą wersję** (upgrade osobno, na znak Piotra). Nowy IDL kopiować do `app/src/idl/` dopiero po upgrade'ie.
+Devnet ma już tę wersję (upgrade wykonany, kod z `d8a5207`); IDL i typy w `app/src/idl/` są zgodne z programem na łańcuchu.
 - `accept_settlement`: konto `mint` jest teraz **mut** (decay spala tokeny, więc zmienia supply). Lista kont bez zmian.
 - Nowa instrukcja `close_escrow` (bez argumentów), podpisuje **klient**: konta `client` (mut, signer), `escrow` (mut, zamykane), `mint`, `vault` (mut), `token_program`. Dozwolona w stanach `Released`, `Refunded`, `Settled`, `Burned`, gdy skarbiec ma saldo 0. Po niej konta `escrow` i `vault` nie istnieją, a rent wraca do klienta. Przycisk "Zamknij umowę i odzyskaj rent" tylko dla klienta w stanach końcowych; po zamknięciu umowa znika z listy (konto nie istnieje).
 - Nowy błąd `VaultNotEmpty` ("Vault still holds tokens"); dodać tłumaczenie.

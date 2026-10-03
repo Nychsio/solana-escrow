@@ -39,6 +39,8 @@ Format: `data | decyzja | dlaczego | kto`
 2026-10-03 | close_escrow (tylko klient, stany końcowe, skarbiec pusty): zamyka skarbiec (CPI close_account, podpis PDA) i konto Escrow (close = client) | zwrot rentu; po zamknięciu id można użyć ponownie | Piotr
 2026-10-03 | burn_if_unsettled bez zmian, a CPI burn w accept_settlement napisany osobno (bez refaktoru wspólnego helpera) | zakaz ruszania burn_if_unsettled w zadaniu 5; do ewentualnego scalenia później | Claude Code
 2026-10-03 | Upgrade programu na devnecie do wersji z main (decay + close_escrow) zatwierdzony; stwierdzono, że devnet jest już bajt w bajt równy lokalnemu escrow.so, więc dodatkowy `anchor upgrade` pominięty | koszt bufora ~1,5 SOL bez zysku; front przełączony na nowy IDL | Piotr (decyzja), Claude Code (weryfikacja)
+2026-10-03 | Upgrade devnet: najpierw `solana program extend` o 20 024 B, potem `anchor deploy`; upgrade authority zostaje | nowy program jest większy od starego; odebranie authority przy code freeze | Piotr
+2026-10-03 | scripts/demo-dispute.ts i weryfikacja statusów transakcji przez RPC (verifySignatures) w skryptach demo | dowód na żywo dla decay i close_escrow, bez polegania na samym wydruku | Piotr
 
 ## Użyte komponenty zewnętrzne (disclosure)
 - Solana (devnet), Solana CLI
