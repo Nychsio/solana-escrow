@@ -43,6 +43,10 @@ Format: `data | decyzja | dlaczego | kto`
 2026-10-03 | scripts/demo-dispute.ts i weryfikacja statusów transakcji przez RPC (verifySignatures) w skryptach demo | dowód na żywo dla decay i close_escrow, bez polegania na samym wydruku | Piotr
 
 2026-10-03 | RPC devnet: Helius (free tier) przez VITE_RPC_URL, klucz tylko w app/.env (poza gitem); domyślnie publiczny api.devnet.solana.com | publiczny RPC devnetu zwracał 429 przy demo dwoma portfelami; RPC tylko przekazuje transakcje, o niczym nie decyduje i można go podmienić jedną zmienną | Piotr
+2026-10-04 | Zależność frontu: lucide-react (ikony SVG zamiast emoji) | spójne ikony, brak emoji w UI | Piotr
+2026-10-04 | Zależność frontu: @fontsource/league-spartan (600, 700) | nagłówki; fonty hostowane lokalnie, bez Google Fonts | Piotr
+2026-10-04 | Zależność frontu: @fontsource/inter (400, 500, 600) | tekst UI; lokalnie | Piotr
+2026-10-04 | Zależność frontu: @fontsource/jetbrains-mono (400, 700) | hashe, adresy, kwoty; lokalnie | Piotr
 
 ## Użyte komponenty zewnętrzne (disclosure)
 - Solana (devnet), Solana CLI
@@ -54,6 +58,6 @@ Format: `data | decyzja | dlaczego | kto`
 - Surfpool 1.6.0 (lokalny walidator uruchamiany przez `anchor test`)
 - Gemini (research mechanizmów sporu, bez generowania kodu)
 - ts-node (uruchamianie skryptów demo), Solana Explorer (linki do transakcji)
-- Frontend: Vite, React, TypeScript, @vitejs/plugin-react, @solana/wallet-adapter-base / -react / -react-ui, buffer, Web Crypto API (SHA-256), Phantom (portfel do demo)
+- Frontend: lucide-react, @fontsource/{league-spartan,inter,jetbrains-mono}, Vite, React, TypeScript, @vitejs/plugin-react, @solana/wallet-adapter-base / -react / -react-ui, buffer, Web Crypto API (SHA-256), Phantom (portfel do demo)
 - Playwright + Chromium (lokalny test UI z atrapą RPC, poza repo)
 - Helius (RPC devnet, free tier; wymienny przez VITE_RPC_URL)
