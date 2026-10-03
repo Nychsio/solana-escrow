@@ -64,6 +64,6 @@ Ustawienia, które działają: RPC Helius w `app/.env` (VITE_RPC_URL, poza gitem
 
 ### Błędy frontu znalezione przy klikaniu (do zadania dla Claude Code)
 1. Hash z pliku: naprawione w kodzie (try/catch z komunikatem + reset `value`); przyczyny u Piotra nie udało się odtwworzyć (patrz log.md), do potwierdzenia w przeklikaniu.
-2. Po `close_escrow` ekran umowy pokazuje błąd „Nie znaleziono umowy… Account does not exist” (konto zamknięte poprawnie, polling dalej je czyta). Ma pokazać „Umowa zamknięta, rent zwrócony” + link do tx i do listy.
+2. Po `close_escrow`: naprawione (ekran "Umowa zamknięta" + historia + link do listy, polling zatrzymany).
 3. Odporność: przy wygasłym blockhashu automatycznie pobrać nowy i ponowić prośbę o podpis.
 4. Potem: CSS (zadanie 6), README „Dowód na devnecie”, odebranie upgrade authority (--final), PDF, wideo.
