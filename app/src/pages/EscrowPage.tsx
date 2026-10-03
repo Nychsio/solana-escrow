@@ -1,3 +1,4 @@
+import { ArrowLeft, ExternalLink } from "lucide-react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -108,7 +109,7 @@ export function EscrowPage({ address }: { address: string }) {
       <div className="page">
         <h2 data-ov="Escrow">Umowa <Addr value={pda.toBase58()} /></h2>
         <p><b>Umowa zamknięta, rent zwrócony klientowi.</b></p>
-        <p><a href="#/">← Lista umów</a></p>
+        <p><a href="#/" className="back"><ArrowLeft size={16} strokeWidth={2} />Lista umów</a></p>
         <hr className="glass-separator" />
         <h3 data-ov="Chain">Historia transakcji</h3>
         <button onClick={() => loadHistory()}>Odśwież</button>
@@ -116,7 +117,7 @@ export function EscrowPage({ address }: { address: string }) {
           {history.map((h) => (
             <li key={h.sig}>
               {h.time ? fmtDate(h.time) : "?"} · <b>{IX_LABELS[h.ix] ?? h.ix}</b> {h.ok ? "" : "(błąd)"} ·{" "}
-              <a href={txUrl(h.sig)} target="_blank" rel="noreferrer">{h.sig.slice(0, 12)}…</a>
+              <a href={txUrl(h.sig)} target="_blank" rel="noreferrer"><span className="mono">{h.sig.slice(0, 12)}…</span><ExternalLink size={16} strokeWidth={2} /></a>
             </li>
           ))}
         </ul>
@@ -193,7 +194,7 @@ export function EscrowPage({ address }: { address: string }) {
         {history.map((h) => (
           <li key={h.sig}>
             {h.time ? fmtDate(h.time) : "?"} · <b>{IX_LABELS[h.ix] ?? h.ix}</b> {h.ok ? "" : "(błąd)"} ·{" "}
-            <a href={txUrl(h.sig)} target="_blank" rel="noreferrer">{h.sig.slice(0, 12)}…</a>
+            <a href={txUrl(h.sig)} target="_blank" rel="noreferrer"><span className="mono">{h.sig.slice(0, 12)}…</span><ExternalLink size={16} strokeWidth={2} /></a>
           </li>
         ))}
       </ul>

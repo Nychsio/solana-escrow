@@ -1,3 +1,4 @@
+import { Plus } from "lucide-react";
 import { BN } from "@anchor-lang/core";
 import { TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync } from "@solana/spl-token";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
@@ -135,7 +136,7 @@ export function NewEscrow() {
       </p>
       {formError && <p className="error">{formError}</p>}
       <button className="primary" disabled={busy} onClick={submit}>
-        {busy ? "Wysyłanie…" : "Utwórz i wpłać do skarbca"}
+        <Plus size={16} strokeWidth={2} />{busy ? "Wysyłanie…" : "Utwórz i wpłać do skarbca"}
       </button>
     </div>
   );

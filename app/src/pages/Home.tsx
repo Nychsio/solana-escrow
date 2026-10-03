@@ -1,3 +1,4 @@
+import { Plus } from "lucide-react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
 import { useCallback, useEffect, useState } from "react";
@@ -56,7 +57,7 @@ export function Home() {
           <button disabled={tab === "client"} onClick={() => setTab("client")}>Jako klient</button>
           <button disabled={tab === "freelancer"} onClick={() => setTab("freelancer")}>Jako wykonawca</button>
           <button onClick={() => load()}>Odśwież</button>{" "}
-          <a href="#/new"><button className="primary">+ Nowa umowa</button></a>
+          <a href="#/new"><button className="primary"><Plus size={16} strokeWidth={2} />Nowa umowa</button></a>
           {rows === null ? (
             <p>Ładowanie…</p>
           ) : rows.length === 0 ? (

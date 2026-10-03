@@ -1,3 +1,4 @@
+import { Check, ExternalLink, RefreshCw, X } from "lucide-react";
 import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
 import { txUrl } from "./config";
 import { translateError } from "./errors";
@@ -53,12 +54,12 @@ export function TxProvider({ children }: { children: ReactNode }) {
       <div className="toasts">
         {toasts.map((t) => (
           <div key={t.id} className={`toast ${t.info ? "info" : t.ok ? "ok" : "err"}`}>
-            <b>{t.info ? "⟳" : t.ok ? "✔" : "✖"} {t.label}</b>{" "}
+            <b>{t.info ? <RefreshCw className="spin" size={16} strokeWidth={2} /> : t.ok ? <Check size={16} strokeWidth={2} /> : <X size={16} strokeWidth={2} />}{t.label}</b>{" "}
             {t.sig && (
-              <a href={txUrl(t.sig)} target="_blank" rel="noreferrer">Explorer</a>
+              <a href={txUrl(t.sig)} target="_blank" rel="noreferrer">Explorer<ExternalLink size={16} strokeWidth={2} /></a>
             )}
             {t.msg && <div>{t.msg}</div>}
-            <button onClick={() => setToasts((l) => l.filter((x) => x.id !== t.id))}>×</button>
+            <button onClick={() => setToasts((l) => l.filter((x) => x.id !== t.id))}aria-label="Zamknij"><X size={16} strokeWidth={2} /></button>
           </div>
         ))}
       </div>

@@ -1,3 +1,4 @@
+import { CircleCheck, CircleX, Upload } from "lucide-react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useState } from "react";
 import { toHex } from "../format";
@@ -92,7 +93,7 @@ export function Delivery({ pda, esc, now, role, reload }: EscrowView) {
             <p>
               {hash.label}: <code className="hash">{toHex(hash.h)}</code>
               <br />
-              <button className="primary" disabled={busy} onClick={deliver}>Zgłoś dostawę (mark_delivered)</button>
+              <button className="primary" disabled={busy} onClick={deliver}><Upload size={16} strokeWidth={2} />Zgłoś dostawę (mark_delivered)</button>
             </p>
           )}
         </>
@@ -104,7 +105,12 @@ export function Delivery({ pda, esc, now, role, reload }: EscrowView) {
           <HashInput onHash={(h, label) => h && setCheck({ ok: toHex(h) === onChain, hex: toHex(h), label })} />
           {check && (
             <p>
-              {check.ok ? "✅ Zgodny z hashem on-chain" : "❌ NIEZGODNY z hashem on-chain"} ({check.label})
+              {check.ok ? (
+                <b className="verdict ok"><CircleCheck size={16} strokeWidth={2} />Zgodny z hashem on-chain</b>
+              ) : (
+                <b className="verdict bad"><CircleX size={16} strokeWidth={2} />NIEZGODNY z hashem on-chain</b>
+              )}{" "}
+              ({check.label})
               <br />
               <code className="hash">{check.hex}</code>
             </p>
