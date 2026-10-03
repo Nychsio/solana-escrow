@@ -18,8 +18,16 @@ pub mod escrow {
         amount: u64,
         deadline_ts: i64,
         review_window_secs: u64,
+        dispute_window_secs: u64,
     ) -> Result<()> {
-        instructions::create::create(ctx, id, amount, deadline_ts, review_window_secs)
+        instructions::create::create(
+            ctx,
+            id,
+            amount,
+            deadline_ts,
+            review_window_secs,
+            dispute_window_secs,
+        )
     }
 
     pub fn mark_delivered(ctx: Context<MarkDelivered>, deliverable_hash: [u8; 32]) -> Result<()> {
@@ -40,5 +48,17 @@ pub mod escrow {
 
     pub fn reject(ctx: Context<Reject>) -> Result<()> {
         instructions::delivery::reject(ctx)
+    }
+
+    pub fn propose_settlement(ctx: Context<ProposeSettlement>, freelancer_bps: u16) -> Result<()> {
+        instructions::dispute::propose_settlement(ctx, freelancer_bps)
+    }
+
+    pub fn accept_settlement(ctx: Context<AcceptSettlement>, freelancer_bps: u16) -> Result<()> {
+        instructions::dispute::accept_settlement(ctx, freelancer_bps)
+    }
+
+    pub fn burn_if_unsettled(ctx: Context<BurnIfUnsettled>) -> Result<()> {
+        instructions::dispute::burn_if_unsettled(ctx)
     }
 }

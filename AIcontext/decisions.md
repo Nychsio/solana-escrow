@@ -15,6 +15,11 @@ Format: `data | decyzja | dlaczego | kto`
 2026-10-03 | Wypłata przelewa całe saldo skarbca, nie pole `amount` | działa też dla mintów Token-2022 z opłatą transferową i nie zostawia resztek w skarbcu | Claude Code
 2026-10-03 | Konto docelowe wypłaty musi już istnieć (dowolne konto tokenowe odbiorcy dla tego minta) | bez `init_if_needed`; frontend dołoży utworzenie ATA w tej samej transakcji | Claude Code
 2026-10-03 | Testy czasowe na domyślnym walidatorze Anchor 1.x (Surfpool): czekanie = sleep + pusta transakcja | Surfpool produkuje blok i przesuwa zegar tylko przy transakcji | Claude Code
+2026-10-03 | Spór: ugoda dwustronna albo spalenie po oknie | brak arbitra, nikt (także autor) nie zyskuje na sporze | Piotr
+2026-10-03 | Nowe pola konta (dispute_window_secs, frozen_at, settle_proposer, settle_bps) wzięte z _reserved (64 -> 45 B) | rozmiar konta bez zmian, asercja w state.rs | Piotr
+2026-10-03 | Ugoda dzieli aktualne saldo skarbca (saldo*bps/10000 dla wykonawcy, reszta dla klienta), zaokrąglenie na korzyść klienta | suma wypłat zawsze równa saldu, brak resztek; działa z mintami z opłatą transferową | Claude Code
+2026-10-03 | accept_settlement wymaga podania bps zgodnego z zapisanym | ochrona przed podmianą propozycji tuż przed akceptacją | Piotr
+2026-10-03 | Seedy podpisu PDA w jednym miejscu (Escrow::with_signer_seeds), używane przez wypłaty i spalenie | jedna ścieżka podpisu skarbca | Claude Code
 
 ## Użyte komponenty zewnętrzne (disclosure)
 - Solana (devnet), Solana CLI

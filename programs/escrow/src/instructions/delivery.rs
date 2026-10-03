@@ -30,13 +30,14 @@ pub fn mark_delivered(ctx: Context<MarkDelivered>, deliverable_hash: [u8; 32]) -
 }
 
 /// Client disputes the delivery inside the review window. The funds stay in
-/// the vault and no instruction accepts the Frozen state, so nobody can move them.
+/// the vault until the parties settle or the dispute window runs out (see dispute.rs).
 pub fn reject(ctx: Context<Reject>) -> Result<()> {
     let escrow = &mut ctx.accounts.escrow;
     escrow.require_state(&[EscrowState::Delivered])?;
     let now = Clock::get()?.unix_timestamp;
     require!(now <= escrow.review_ends_at()?, ErrorCode::ReviewWindowClosed);
 
+    escrow.frozen_at = now;
     escrow.state = EscrowState::Frozen;
     Ok(())
 }

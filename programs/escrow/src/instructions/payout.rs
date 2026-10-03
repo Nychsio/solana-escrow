@@ -96,6 +96,7 @@ pub fn release(ctx: Context<Release>) -> Result<()> {
         &ctx.accounts.mint,
         &ctx.accounts.freelancer_token,
         &ctx.accounts.token_program,
+        ctx.accounts.vault.amount,
     )
 }
 
@@ -113,6 +114,7 @@ pub fn claim_if_silent(ctx: Context<ClaimIfSilent>) -> Result<()> {
         &ctx.accounts.mint,
         &ctx.accounts.freelancer_token,
         &ctx.accounts.token_program,
+        ctx.accounts.vault.amount,
     )
 }
 
@@ -130,32 +132,28 @@ pub fn refund_if_late(ctx: Context<RefundIfLate>) -> Result<()> {
         &ctx.accounts.mint,
         &ctx.accounts.client_token,
         &ctx.accounts.token_program,
+        ctx.accounts.vault.amount,
     )
 }
 
-/// The only place tokens leave a vault. The escrow PDA signs via its seeds,
-/// which only this program can do, and the whole vault balance is paid out.
-fn pay_from_vault<'info>(
+/// The only place tokens are paid out of a vault. The escrow PDA signs via
+/// its seeds, which only this program can do.
+pub(crate) fn pay_from_vault<'info>(
     escrow: &Account<'info, Escrow>,
     vault: &InterfaceAccount<'info, TokenAccount>,
     mint: &InterfaceAccount<'info, Mint>,
     destination: &InterfaceAccount<'info, TokenAccount>,
     token_program: &Interface<'info, TokenInterface>,
+    amount: u64,
 ) -> Result<()> {
-    let id = escrow.id.to_le_bytes();
-    let signer_seeds: &[&[&[u8]]] = &[&[
-        ESCROW_SEED,
-        escrow.client.as_ref(),
-        id.as_ref(),
-        &[escrow.bump],
-    ]];
-
     let cpi_accounts = TransferChecked {
         from: vault.to_account_info(),
         mint: mint.to_account_info(),
         to: destination.to_account_info(),
         authority: escrow.to_account_info(),
     };
-    let cpi_ctx = CpiContext::new_with_signer(token_program.key(), cpi_accounts, signer_seeds);
-    token_interface::transfer_checked(cpi_ctx, vault.amount, mint.decimals)
+    escrow.with_signer_seeds(|seeds| {
+        let cpi_ctx = CpiContext::new_with_signer(token_program.key(), cpi_accounts, seeds);
+        token_interface::transfer_checked(cpi_ctx, amount, mint.decimals)
+    })
 }

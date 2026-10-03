@@ -16,6 +16,7 @@ import {
   Transaction,
 } from "@solana/web3.js";
 import { assert } from "chai";
+import { getMint } from "@solana/spl-token";
 import { Escrow } from "../target/types/escrow";
 
 describe("escrow", () => {
@@ -83,11 +84,18 @@ describe("escrow", () => {
     id: BN,
     amount: BN,
     deadlineTs: number,
-    reviewWindowSecs: number
+    reviewWindowSecs: number,
+    disputeWindowSecs = 3600
   ) => {
     const escrow = escrowPda(id);
     return program.methods
-      .create(id, amount, new BN(deadlineTs), new BN(reviewWindowSecs))
+      .create(
+        id,
+        amount,
+        new BN(deadlineTs),
+        new BN(reviewWindowSecs),
+        new BN(disputeWindowSecs)
+      )
       .accountsPartial({
         client: client.publicKey,
         freelancer: freelancer.publicKey,
@@ -102,10 +110,15 @@ describe("escrow", () => {
   };
 
   // Opens a funded escrow and returns its address plus its deadline.
-  const open = async (deadlineInSecs: number, reviewWindowSecs: number) => {
+  const open = async (
+    deadlineInSecs: number,
+    reviewWindowSecs: number,
+    disputeWindowSecs = 3600,
+    amount = AMOUNT
+  ) => {
     const id = new BN(nextId++);
     const deadlineTs = (await chainNow()) + deadlineInSecs;
-    await create(id, AMOUNT, deadlineTs, reviewWindowSecs);
+    await create(id, amount, deadlineTs, reviewWindowSecs, disputeWindowSecs);
     return { escrow: escrowPda(id), deadlineTs };
   };
 
@@ -176,6 +189,70 @@ describe("escrow", () => {
       })
       .signers([signer])
       .rpc();
+
+  const propose = (escrow: PublicKey, bps: number, signer = client) =>
+    program.methods
+      .proposeSettlement(bps)
+      .accountsPartial({ signer: signer.publicKey, escrow })
+      .signers([signer])
+      .rpc();
+
+  const accept = (escrow: PublicKey, bps: number, signer = freelancer) =>
+    program.methods
+      .acceptSettlement(bps)
+      .accountsPartial({
+        signer: signer.publicKey,
+        escrow,
+        mint,
+        vault: vaultOf(escrow),
+        freelancerToken,
+        clientToken,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([signer])
+      .rpc();
+
+  const burn = (escrow: PublicKey, payer = stranger) =>
+    program.methods
+      .burnIfUnsettled()
+      .accountsPartial({
+        payer: payer.publicKey,
+        escrow,
+        mint,
+        vault: vaultOf(escrow),
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([payer])
+      .rpc();
+
+  // Delivered and rejected inside the review window, so the escrow is Frozen.
+  const freeze = async (disputeWindowSecs = 3600, amount = AMOUNT) => {
+    const { escrow } = await open(LONG, 3600, disputeWindowSecs, amount);
+    await markDelivered(escrow);
+    await reject(escrow);
+    return escrow;
+  };
+
+  const waitForDisputeEnd = async (escrow: PublicKey) => {
+    const account = await program.account.escrow.fetch(escrow);
+    await waitUntilAfter(
+      account.frozenAt.toNumber() + account.disputeWindowSecs.toNumber()
+    );
+  };
+
+  // Settled and Burned are terminal: no instruction may accept them.
+  const expectEveryInstructionRejected = async (escrow: PublicKey) => {
+    await expectError(markDelivered(escrow), "InvalidState");
+    await expectError(reject(escrow), "InvalidState");
+    await expectError(release(escrow), "InvalidState");
+    await expectError(claimIfSilent(escrow), "InvalidState");
+    await expectError(refundIfLate(escrow), "InvalidState");
+    await expectError(propose(escrow, 5000, client), "InvalidState");
+    await expectError(propose(escrow, 5000, freelancer), "InvalidState");
+    await expectError(accept(escrow, 5000, freelancer), "InvalidState");
+    await expectError(accept(escrow, 5000, client), "InvalidState");
+    await expectError(burn(escrow), "InvalidState");
+  };
 
   const expectError = async (promise: Promise<unknown>, code: string) => {
     try {
@@ -254,6 +331,14 @@ describe("escrow", () => {
       assert.equal(account.amount.toString(), AMOUNT.toString());
       assert.equal(account.deadlineTs.toString(), deadlineTs.toString());
       assert.equal(account.reviewWindowSecs.toString(), "3600");
+      assert.equal(account.disputeWindowSecs.toString(), "3600");
+      assert.equal(account.frozenAt.toString(), "0");
+      assert.equal(account.settleProposer, 0);
+      assert.equal(account.settleBps, 0);
+      assert.deepEqual(account.reserved, new Array(45).fill(0));
+      // 8-byte discriminator + 235 bytes: the layout size must never change.
+      const info = await connection.getAccountInfo(escrow);
+      assert.equal(info!.data.length, 8 + 235);
       assert.isNull(account.deliveredAt);
       assert.deepEqual(account.deliverableHash, new Array(32).fill(0));
       assert.deepEqual(account.state, { funded: {} });
@@ -264,6 +349,14 @@ describe("escrow", () => {
       await expectError(
         create(new BN(nextId++), new BN(0), deadlineTs, 3600),
         "InvalidAmount"
+      );
+    });
+
+    it("rejects a zero dispute window", async () => {
+      const deadlineTs = (await chainNow()) + LONG;
+      await expectError(
+        create(new BN(nextId++), AMOUNT, deadlineTs, 3600, 0),
+        "InvalidDisputeWindow"
       );
     });
 
@@ -378,6 +471,11 @@ describe("escrow", () => {
       const account = await program.account.escrow.fetch(escrow);
       await reject(escrow);
       assert.deepEqual(await stateOf(escrow), { frozen: {} });
+      const frozen = await program.account.escrow.fetch(escrow);
+      assert.isAtLeast(
+        frozen.frozenAt.toNumber(),
+        (account.deliveredAt as BN).toNumber()
+      );
 
       // Past both the deadline and the review window, so only the state blocks.
       await waitUntilAfter(
@@ -392,6 +490,146 @@ describe("escrow", () => {
 
       assert.equal(await balance(vaultOf(escrow)), AMOUNT.toString());
       assert.deepEqual(await stateOf(escrow), { frozen: {} });
+    });
+  });
+
+  describe("settlement", () => {
+    it("propose and accept are only possible while Frozen", async () => {
+      const funded = (await open(LONG, 3600)).escrow;
+      await expectError(propose(funded, 5000), "InvalidState");
+      await expectError(accept(funded, 5000), "InvalidState");
+      await expectError(burn(funded), "InvalidState");
+
+      const delivered = (await open(LONG, 3600)).escrow;
+      await markDelivered(delivered);
+      await expectError(propose(delivered, 5000, freelancer), "InvalidState");
+      await expectError(accept(delivered, 5000), "InvalidState");
+      await expectError(burn(delivered), "InvalidState");
+    });
+
+    it("rejects a share above 10000 bps", async () => {
+      const escrow = await freeze();
+      await expectError(propose(escrow, 10001), "InvalidBps");
+      assert.equal(
+        (await program.account.escrow.fetch(escrow)).settleProposer,
+        0
+      );
+    });
+
+    it("accept needs a proposal from the other party and the exact share", async () => {
+      const escrow = await freeze();
+
+      await expectError(accept(escrow, 5000, freelancer), "NoProposal");
+      await expectError(accept(escrow, 5000, client), "NoProposal");
+
+      await propose(escrow, 6000, client);
+      await expectError(accept(escrow, 6000, client), "ProposerCannotAccept");
+      await expectError(accept(escrow, 5999, freelancer), "SettlementMismatch");
+      await expectError(accept(escrow, 10000, freelancer), "SettlementMismatch");
+
+      assert.equal(await balance(vaultOf(escrow)), AMOUNT.toString());
+      assert.deepEqual(await stateOf(escrow), { frozen: {} });
+    });
+
+    it("a stranger can neither propose nor accept", async () => {
+      const escrow = await freeze();
+      await expectError(propose(escrow, 5000, stranger), "Unauthorized");
+      await expectError(accept(escrow, 5000, stranger), "Unauthorized");
+
+      await propose(escrow, 5000, client);
+      await expectError(accept(escrow, 5000, stranger), "Unauthorized");
+      assert.equal(await balance(vaultOf(escrow)), AMOUNT.toString());
+    });
+
+    for (const { bps, amount } of [
+      { bps: 0, amount: AMOUNT },
+      { bps: 10000, amount: AMOUNT },
+      { bps: 7000, amount: AMOUNT },
+      { bps: 3333, amount: new BN(1001) },
+    ]) {
+      it(`splits the vault at ${bps} bps (amount ${amount})`, async () => {
+        const escrow = await freeze(3600, amount);
+        const clientBefore = Number(await balance(clientToken));
+        const freelancerBefore = Number(await balance(freelancerToken));
+
+        await propose(escrow, bps, client);
+        await accept(escrow, bps, freelancer);
+
+        const total = amount.toNumber();
+        const toFreelancer = Math.floor((total * bps) / 10000);
+        assert.equal(
+          Number(await balance(freelancerToken)) - freelancerBefore,
+          toFreelancer
+        );
+        assert.equal(
+          Number(await balance(clientToken)) - clientBefore,
+          total - toFreelancer
+        );
+        assert.equal(await balance(vaultOf(escrow)), "0");
+        assert.deepEqual(await stateOf(escrow), { settled: {} });
+        await expectEveryInstructionRejected(escrow);
+      });
+    }
+
+    it("the freelancer can propose and the client accept", async () => {
+      const escrow = await freeze();
+      await propose(escrow, 2500, freelancer);
+      await expectError(accept(escrow, 2500, freelancer), "ProposerCannotAccept");
+      await accept(escrow, 2500, client);
+      assert.deepEqual(await stateOf(escrow), { settled: {} });
+    });
+
+    it("a new proposal replaces the old one", async () => {
+      const escrow = await freeze();
+      const freelancerBefore = Number(await balance(freelancerToken));
+
+      await propose(escrow, 9000, freelancer);
+      await propose(escrow, 4000, client);
+
+      const account = await program.account.escrow.fetch(escrow);
+      assert.equal(account.settleProposer, 1);
+      assert.equal(account.settleBps, 4000);
+
+      // The old offer can no longer be accepted, and its author is not the proposer any more.
+      await expectError(accept(escrow, 9000, freelancer), "SettlementMismatch");
+      await expectError(accept(escrow, 4000, client), "ProposerCannotAccept");
+
+      await accept(escrow, 4000, freelancer);
+      assert.equal(
+        Number(await balance(freelancerToken)) - freelancerBefore,
+        (AMOUNT.toNumber() * 4000) / 10000
+      );
+    });
+  });
+
+  describe("burn_if_unsettled", () => {
+    it("only works after the dispute window, for anyone, and burns the vault", async () => {
+      const escrow = await freeze(4);
+      await propose(escrow, 5000, client);
+      await expectError(burn(escrow), "DisputeWindowOpen");
+      await expectError(burn(escrow, client), "DisputeWindowOpen");
+
+      await waitForDisputeEnd(escrow);
+
+      await expectError(propose(escrow, 5000, freelancer), "DisputeWindowClosed");
+      await expectError(accept(escrow, 5000, freelancer), "DisputeWindowClosed");
+      assert.equal(await balance(vaultOf(escrow)), AMOUNT.toString());
+
+      const clientBefore = await balance(clientToken);
+      const freelancerBefore = await balance(freelancerToken);
+      const supplyBefore = (await getMint(connection, mint)).supply;
+
+      await burn(escrow, stranger);
+
+      assert.equal(await balance(vaultOf(escrow)), "0");
+      assert.equal(
+        (await getMint(connection, mint)).supply.toString(),
+        (supplyBefore - BigInt(AMOUNT.toString())).toString()
+      );
+      assert.equal(await balance(clientToken), clientBefore);
+      assert.equal(await balance(freelancerToken), freelancerBefore);
+      assert.deepEqual(await stateOf(escrow), { burned: {} });
+      await expectEveryInstructionRejected(escrow);
     });
   });
 

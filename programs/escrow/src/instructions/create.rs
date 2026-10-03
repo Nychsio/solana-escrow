@@ -49,8 +49,10 @@ pub fn create(
     amount: u64,
     deadline_ts: i64,
     review_window_secs: u64,
+    dispute_window_secs: u64,
 ) -> Result<()> {
     require!(amount > 0, ErrorCode::InvalidAmount);
+    require!(dispute_window_secs > 0, ErrorCode::InvalidDisputeWindow);
     let now = Clock::get()?.unix_timestamp;
     require!(deadline_ts > now, ErrorCode::DeadlineInPast);
 
@@ -66,7 +68,11 @@ pub fn create(
         state: EscrowState::Funded,
         bump: ctx.bumps.escrow,
         deliverable_hash: [0; 32],
-        _reserved: [0; 64],
+        dispute_window_secs,
+        frozen_at: 0,
+        settle_proposer: SETTLE_NONE,
+        settle_bps: 0,
+        _reserved: [0; 45],
     });
 
     let cpi_accounts = TransferChecked {

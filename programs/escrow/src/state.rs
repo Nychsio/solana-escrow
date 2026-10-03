@@ -20,9 +20,24 @@ pub struct Escrow {
     pub state: EscrowState,
     pub bump: u8,
     pub deliverable_hash: [u8; 32],
-    /// Space for future dispute resolution data, so accounts need no migration.
-    pub _reserved: [u8; 64],
+    /// How long after `reject` the parties may settle before the funds burn.
+    pub dispute_window_secs: u64,
+    pub frozen_at: i64,
+    /// SETTLE_NONE / SETTLE_CLIENT / SETTLE_FREELANCER.
+    pub settle_proposer: u8,
+    /// Freelancer's share of the vault in basis points, as last proposed.
+    pub settle_bps: u16,
+    /// Spare space (carved out of the original 64 bytes) so the account size never changes.
+    pub _reserved: [u8; 45],
 }
+
+/// The account size shipped with the first dispute-ready layout; new fields must come out of `_reserved`.
+const _: () = assert!(Escrow::INIT_SPACE == 235);
+
+pub const MAX_BPS: u16 = 10_000;
+pub const SETTLE_NONE: u8 = 0;
+pub const SETTLE_CLIENT: u8 = 1;
+pub const SETTLE_FREELANCER: u8 = 2;
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, InitSpace)]
 pub enum EscrowState {
@@ -31,6 +46,8 @@ pub enum EscrowState {
     Released,
     Refunded,
     Frozen,
+    Settled,
+    Burned,
 }
 
 impl Escrow {
@@ -46,5 +63,29 @@ impl Escrow {
         let delivered_at = self.delivered_at.ok_or(ErrorCode::NotDelivered)?;
         let window = i64::try_from(self.review_window_secs).unwrap_or(i64::MAX);
         Ok(delivered_at.saturating_add(window))
+    }
+
+    /// Last moment (inclusive) for settlement while the escrow is Frozen.
+    pub fn dispute_ends_at(&self) -> i64 {
+        let window = i64::try_from(self.dispute_window_secs).unwrap_or(i64::MAX);
+        self.frozen_at.saturating_add(window)
+    }
+
+    /// Which party a signer is (SETTLE_CLIENT / SETTLE_FREELANCER), or Unauthorized.
+    pub fn party_role(&self, signer: &Pubkey) -> Result<u8> {
+        if *signer == self.client {
+            Ok(SETTLE_CLIENT)
+        } else if *signer == self.freelancer {
+            Ok(SETTLE_FREELANCER)
+        } else {
+            err!(ErrorCode::Unauthorized)
+        }
+    }
+
+    /// Runs `f` with the escrow PDA's signer seeds. Every vault movement
+    /// (payout or burn) signs through here, so the seeds exist in one place only.
+    pub fn with_signer_seeds<R>(&self, f: impl FnOnce(&[&[&[u8]]]) -> R) -> R {
+        let id = self.id.to_le_bytes();
+        f(&[&[ESCROW_SEED, self.client.as_ref(), id.as_ref(), &[self.bump]]])
     }
 }
