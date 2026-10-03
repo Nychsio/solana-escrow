@@ -78,8 +78,8 @@ Ustawienia, które działają: RPC Helius w `app/.env` (VITE_RPC_URL, poza gitem
 2. Po `close_escrow`: naprawione (ekran "Umowa zamknięta" + historia + link do listy, polling zatrzymany).
 3. Wygasły blockhash: naprawione w kodzie (jedno ponowienie + toast "Ponawiam…"), do potwierdzenia w przeklikaniu (zwlekanie z podpisem >90 s).
 4. CSS i README (Frontend, Phantom Testnet): zrobione. Zostaje: README „Dowód na devnecie”, odebranie upgrade authority (--final), PDF, wideo.
-5. NOWY (21:31): zaraz po create karta wykonawcy pokazała „Umowa zamknięta, rent zwrócony” przy historii z samym Create (konto jeszcze niewidoczne w RPC); F5 pomogło. „Zamknięta” tylko gdy historia ma CloseEscrow, inaczej ponowić odczyt.
-6. Brak presetu 5 min dla okien (jest 120 s / 24 h); w teście dopisany ręcznie w <select>.
+5. Naprawione: "zamknięta" tylko przy CloseEscrow w historii, inaczej 3 ponowienia odczytu co 2 s.
+6. Naprawione: preset 5 min w oknach akceptacji i sporu.
 
 - Restyle frontu wg `design-ref.md` (2026-10-04): tylko CSS, className i `data-ov`, logika bez zmian. Fonty: systemowe; Inter/JetBrains Mono z Google Fonts czekają na zgodę Piotra (wtedy `<link>` w `index.html` + wpis w decisions.md).
 
