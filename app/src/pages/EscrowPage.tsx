@@ -16,6 +16,7 @@ export type EscrowView = {
   now: number;
   role: "client" | "freelancer" | null;
   reload: () => Promise<void>;
+  vaultBal: string | null;
 };
 
 const TIMELINE = "Funded → Delivered → Released  |  Funded → Refunded  |  Delivered → Frozen → Settled / Burned";
@@ -96,7 +97,7 @@ export function EscrowPage({ address }: { address: string }) {
   const disputeEnd = frozenAt > 0 ? frozenAt + esc.disputeWindowSecs.toNumber() : null;
   const hash = toHex(esc.deliverableHash);
   const hasHash = /[1-9a-f]/.test(hash);
-  const view: EscrowView = { pda, esc, now, role, reload };
+  const view: EscrowView = { pda, esc, now, role, reload, vaultBal };
 
   return (
     <div>

@@ -18,6 +18,7 @@ const PL: Record<string, string> = {
   NoProposal: "Brak propozycji ugody.",
   ProposerCannotAccept: "Nie możesz przyjąć własnej propozycji.",
   SettlementMismatch: "Propozycja się zmieniła, odśwież.",
+  VaultNotEmpty: "Skarbiec nie jest pusty.",
 };
 
 type AnyErr = {

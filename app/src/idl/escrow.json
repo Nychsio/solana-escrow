@@ -30,6 +30,10 @@
         },
         {
           "name": "mint",
+          "docs": [
+            "Mutable because the decay burn lowers the mint's supply."
+          ],
+          "writable": true,
           "relations": [
             "escrow"
           ]
@@ -291,6 +295,103 @@
         {
           "name": "freelancer_token",
           "writable": true
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "close_escrow",
+      "discriminator": [
+        139,
+        171,
+        94,
+        146,
+        191,
+        91,
+        144,
+        50
+      ],
+      "accounts": [
+        {
+          "name": "client",
+          "docs": [
+            "Receives the rent of both the vault and the escrow account."
+          ],
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "escrow"
+          ]
+        },
+        {
+          "name": "escrow",
+          "writable": true
+        },
+        {
+          "name": "mint",
+          "relations": [
+            "escrow"
+          ]
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "escrow"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
         },
         {
           "name": "token_program"
@@ -831,6 +932,11 @@
       "code": 6015,
       "name": "SettlementMismatch",
       "msg": "Accepted share does not match the proposed one"
+    },
+    {
+      "code": 6016,
+      "name": "VaultNotEmpty",
+      "msg": "Vault still holds tokens"
     }
   ],
   "types": [

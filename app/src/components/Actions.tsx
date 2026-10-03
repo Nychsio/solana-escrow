@@ -16,7 +16,7 @@ const SETTLE_FREELANCER = 2;
 
 // Buttons follow the action matrix in AIcontext/front.md. Visibility is only a hint
 // based on role, state and (chain-estimated) time; the program enforces every rule.
-export function Actions({ pda, esc, now, role, reload }: EscrowView) {
+export function Actions({ pda, esc, now, role, reload, vaultBal }: EscrowView) {
   const program = useProgram();
   const { publicKey } = useWallet();
   const { busy, run } = useTx();
@@ -99,7 +99,15 @@ export function Actions({ pda, esc, now, role, reload }: EscrowView) {
     );
   };
 
+  const close = () =>
+    exec("Zamknięcie umowy i odzyskanie rentu (close_escrow)", () =>
+      program.methods.closeEscrow().accountsPartial({ client: publicKey, escrow: pda, mint, vault, tokenProgram: TOKEN_PROGRAM_ID }).rpc()
+    );
+
   const items: React.ReactNode[] = [];
+  const finished = state === "released" || state === "refunded" || state === "settled" || state === "burned";
+  if (finished && isClient && vaultBal === "0")
+    items.push(<button key="cl" onClick={close}>Zamknij umowę i odzyskaj rent (close_escrow)</button>);
   if (state === "funded") {
     if (isClient && now <= deadline) items.push(<button key="r" onClick={release}>Zatwierdź i wypłać (release)</button>);
     if (isClient && now > deadline) items.push(<button key="rf" onClick={refund}>Odzyskaj środki (refund_if_late)</button>);
@@ -120,6 +128,13 @@ export function Actions({ pda, esc, now, role, reload }: EscrowView) {
       const f = esc.amount.muln(bps).divn(10000);
       return `wykonawca ${fromBase(f)} / klient ${fromBase(esc.amount.sub(f))}`;
     };
+    // Preview only (same formula as the program): burn = vault * elapsed / dispute_window,
+    // elapsed clamped to the window. While Frozen the vault holds the full amount.
+    const win = esc.disputeWindowSecs.toNumber();
+    const elapsed = Math.min(Math.max(now - esc.frozenAt.toNumber(), 0), win);
+    const burned = esc.amount.muln(elapsed).divn(win);
+    const rest = esc.amount.sub(burned);
+    const fl = rest.muln(esc.settleBps).divn(10000);
     dispute = (
       <div className="panel">
         <h4>Spór: ugoda albo spalenie</h4>
@@ -131,6 +146,10 @@ export function Actions({ pda, esc, now, role, reload }: EscrowView) {
         </p>
         {now <= disputeEnd ? (
           <>
+            <p>
+              Przy akceptacji teraz spalisz {((elapsed / win) * 100).toFixed(1)}% skarbca ({fromBase(burned)}).
+              {proposer !== 0 && <> Wykonawca dostanie {fromBase(fl)}, klient {fromBase(rest.sub(fl))}.</>} Ostateczny rachunek liczy program.
+            </p>
             {role && (
               <p>
                 Udział wykonawcy: <input type="range" min={0} max={100} value={pct} onChange={(e) => setPct(Number(e.target.value))} />{" "}
