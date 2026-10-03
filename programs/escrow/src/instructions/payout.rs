@@ -84,6 +84,33 @@ pub struct RefundIfLate<'info> {
     pub token_program: Interface<'info, TokenInterface>,
 }
 
+#[derive(Accounts)]
+pub struct CancelByFreelancer<'info> {
+    pub freelancer: Signer<'info>,
+    #[account(
+        mut,
+        has_one = freelancer @ ErrorCode::Unauthorized,
+        has_one = mint,
+    )]
+    pub escrow: Account<'info, Escrow>,
+    pub mint: InterfaceAccount<'info, Mint>,
+    #[account(
+        mut,
+        associated_token::mint = mint,
+        associated_token::authority = escrow,
+        associated_token::token_program = token_program,
+    )]
+    pub vault: InterfaceAccount<'info, TokenAccount>,
+    #[account(
+        mut,
+        token::mint = mint,
+        token::authority = escrow.client,
+        token::token_program = token_program,
+    )]
+    pub client_token: InterfaceAccount<'info, TokenAccount>,
+    pub token_program: Interface<'info, TokenInterface>,
+}
+
 /// Client accepts the work (or pays early) and the vault goes to the freelancer.
 pub fn release(ctx: Context<Release>) -> Result<()> {
     let escrow = &mut ctx.accounts.escrow;
@@ -124,6 +151,29 @@ pub fn refund_if_late(ctx: Context<RefundIfLate>) -> Result<()> {
     escrow.require_state(&[EscrowState::Funded])?;
     let now = Clock::get()?.unix_timestamp;
     require!(now > escrow.deadline_ts, ErrorCode::DeadlineNotReached);
+    escrow.state = EscrowState::Refunded;
+
+    pay_from_vault(
+        &ctx.accounts.escrow,
+        &ctx.accounts.vault,
+        &ctx.accounts.mint,
+        &ctx.accounts.client_token,
+        &ctx.accounts.token_program,
+        ctx.accounts.vault.amount,
+    )
+}
+
+/// Freelancer gives up and returns the whole vault to the client, no burn. Only the
+/// signer loses anything, so it needs no time conditions and works in every live state.
+pub fn cancel_by_freelancer(ctx: Context<CancelByFreelancer>) -> Result<()> {
+    let escrow = &mut ctx.accounts.escrow;
+    escrow.require_state(&[
+        EscrowState::Funded,
+        EscrowState::Delivered,
+        EscrowState::Frozen,
+    ])?;
+    escrow.settle_proposer = SETTLE_NONE;
+    escrow.settle_bps = 0;
     escrow.state = EscrowState::Refunded;
 
     pay_from_vault(

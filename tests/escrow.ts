@@ -225,6 +225,24 @@ describe("escrow", () => {
       .signers([payer])
       .rpc();
 
+  const cancel = (
+    escrow: PublicKey,
+    signer = freelancer,
+    destination = clientToken
+  ) =>
+    program.methods
+      .cancelByFreelancer()
+      .accountsPartial({
+        freelancer: signer.publicKey,
+        escrow,
+        mint,
+        vault: vaultOf(escrow),
+        clientToken: destination,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([signer])
+      .rpc();
+
   const closeEscrow = (escrow: PublicKey, signer = client) =>
     program.methods
       .closeEscrow()
@@ -292,6 +310,7 @@ describe("escrow", () => {
     await expectError(accept(escrow, 5000, freelancer), "InvalidState");
     await expectError(accept(escrow, 5000, client), "InvalidState");
     await expectError(burn(escrow), "InvalidState");
+    await expectError(cancel(escrow), "InvalidState");
   };
 
   const expectError = async (promise: Promise<unknown>, code: string) => {
@@ -742,6 +761,88 @@ describe("escrow", () => {
       await waitForDisputeEnd(escrow);
       await burn(escrow);
       await expectClosed(escrow);
+    });
+  });
+
+  describe("cancel_by_freelancer", () => {
+    // The whole vault goes back to the client, nothing burns, and the rent can then be reclaimed.
+    const expectRefundThenClose = async (
+      escrow: PublicKey,
+      signer = freelancer
+    ) => {
+      const supplyBefore = (await getMint(connection, mint)).supply;
+      await expectPayout(escrow, clientToken, () => cancel(escrow, signer));
+      assert.equal(
+        (await getMint(connection, mint)).supply.toString(),
+        supplyBefore.toString()
+      );
+      assert.deepEqual(await stateOf(escrow), { refunded: {} });
+
+      await closeEscrow(escrow);
+      assert.isNull(await connection.getAccountInfo(escrow));
+      assert.isNull(await connection.getAccountInfo(vaultOf(escrow)));
+    };
+
+    it("returns everything to the client from Funded, then close works", async () => {
+      const { escrow } = await open(LONG, 3600);
+      await expectRefundThenClose(escrow);
+    });
+
+    it("returns everything to the client from Delivered", async () => {
+      const { escrow } = await open(LONG, 3600);
+      await markDelivered(escrow);
+      await expectRefundThenClose(escrow);
+    });
+
+    it("returns everything from Frozen without burning, dropping the proposal", async () => {
+      const escrow = await freeze();
+      await propose(escrow, 5000, client);
+      assert.equal(
+        (await program.account.escrow.fetch(escrow)).settleProposer,
+        1
+      );
+
+      const supplyBefore = (await getMint(connection, mint)).supply;
+      await expectPayout(escrow, clientToken, () => cancel(escrow));
+      assert.equal(
+        (await getMint(connection, mint)).supply.toString(),
+        supplyBefore.toString()
+      );
+
+      const account = await program.account.escrow.fetch(escrow);
+      assert.deepEqual(account.state, { refunded: {} });
+      assert.equal(account.settleProposer, 0);
+      assert.equal(account.settleBps, 0);
+      await closeEscrow(escrow);
+      assert.isNull(await connection.getAccountInfo(escrow));
+    });
+
+    it("the client cannot call it", async () => {
+      const { escrow } = await open(LONG, 3600);
+      await expectError(cancel(escrow, client), "Unauthorized");
+      assert.equal(await balance(vaultOf(escrow)), AMOUNT.toString());
+    });
+
+    it("a stranger cannot call it", async () => {
+      const { escrow } = await open(LONG, 3600);
+      await expectError(cancel(escrow, stranger), "Unauthorized");
+      assert.equal(await balance(vaultOf(escrow)), AMOUNT.toString());
+    });
+
+    it("is rejected once the escrow is over", async () => {
+      const { escrow } = await open(LONG, 3600);
+      await release(escrow);
+      await expectError(cancel(escrow), "InvalidState");
+    });
+
+    it("rejects a payout account that does not belong to the client", async () => {
+      const { escrow } = await open(LONG, 3600);
+      await expectError(
+        cancel(escrow, freelancer, freelancerToken),
+        "ConstraintTokenOwner"
+      );
+      assert.equal(await balance(vaultOf(escrow)), AMOUNT.toString());
+      assert.deepEqual(await stateOf(escrow), { funded: {} });
     });
   });
 

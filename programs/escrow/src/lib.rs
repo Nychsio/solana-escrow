@@ -46,6 +46,10 @@ pub mod escrow {
         instructions::payout::refund_if_late(ctx)
     }
 
+    pub fn cancel_by_freelancer(ctx: Context<CancelByFreelancer>) -> Result<()> {
+        instructions::payout::cancel_by_freelancer(ctx)
+    }
+
     pub fn reject(ctx: Context<Reject>) -> Result<()> {
         instructions::delivery::reject(ctx)
     }
