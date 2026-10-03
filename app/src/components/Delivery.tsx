@@ -14,19 +14,44 @@ async function sha256(data: ArrayBuffer | string): Promise<Uint8Array> {
 
 function HashInput({ onHash }: { onHash: (h: Uint8Array | null, label: string) => void }) {
   const [text, setText] = useState("");
+  const [err, setErr] = useState<string | null>(null);
   return (
     <div>
       <input
         type="file"
         onChange={async (e) => {
-          const f = e.target.files?.[0];
-          if (f) onHash(await sha256(await f.arrayBuffer()), f.name);
+          const input = e.target;
+          const f = input.files?.[0];
+          setErr(null);
+          try {
+            if (f) onHash(await sha256(await f.arrayBuffer()), f.name);
+          } catch (ex) {
+            console.error("hash from file", ex);
+            onHash(null, "");
+            setErr(`Nie udało się odczytać pliku: ${(ex as Error).message ?? ex}`);
+          } finally {
+            // Without a reset, choosing the same file again does not fire onChange.
+            input.value = "";
+          }
         }}
       />
+      {err && <div className="error">{err}</div>}
       <div>
         albo tekst / link:{" "}
         <input value={text} size={40} onChange={(e) => setText(e.target.value)} />
-        <button disabled={!text} onClick={async () => onHash(await sha256(text), "tekst")}>Policz hash</button>
+        <button
+          disabled={!text}
+          onClick={async () => {
+            setErr(null);
+            try {
+              onHash(await sha256(text), "tekst");
+            } catch (ex) {
+              setErr(`Nie udało się policzyć hasha: ${(ex as Error).message ?? ex}`);
+            }
+          }}
+        >
+          Policz hash
+        </button>
       </div>
     </div>
   );
