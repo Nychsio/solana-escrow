@@ -9,9 +9,13 @@ Format: `data | decyzja | dlaczego | kto`
 2026-10-03 | Solana devnet | wymóg wyzwania, devnet wystarcza | Piotr
 2026-10-03 | Anchor (Rust) + anchor-spl token_interface | najprostsza ścieżka, obsługa SPL Token i Token-2022 | Piotr
 2026-10-03 | Nowe publiczne repo solana-escrow | wymóg publicznego repo w ocenie | Piotr
+2026-10-03 | Anchor CLI 1.1.2 budowany ze źródeł (avm --from-source), crate'y i @anchor-lang/core przypięte do 1.1.2 | gotowa binarka wymaga glibc 2.39, system ma 2.35; przypięcie = zgodność CLI z bibliotekami | Claude Code
+2026-10-03 | Testy: @solana/spl-token 0.4.x + @solana/web3.js 1.x, mocha/chai | tworzenie minta i odczyt kont tokenowych w testach | Claude Code
 
 ## Użyte komponenty zewnętrzne (disclosure)
 - Solana (devnet), Solana CLI
 - Anchor (anchor-lang, anchor-spl)
 - SPL Token
 - Claude Code / Claude (wsparcie przy kodowaniu i planowaniu)
+- @anchor-lang/core, @solana/web3.js, @solana/spl-token, mocha, ts-mocha, chai (testy)
+- Rust 1.89.0 (rust-toolchain.toml), Solana CLI (Agave) 3.1.10, Anchor CLI 1.1.2
