@@ -9,7 +9,8 @@
     "app:install": "yarn --cwd app install",
     "app:dev": "yarn --cwd app dev",
     "app:build": "yarn --cwd app build",
-    "demo:dispute": "ts-node -P scripts/tsconfig.json scripts/demo-dispute.ts"
+    "demo:dispute": "ts-node -P scripts/tsconfig.json scripts/demo-dispute.ts",
+    "demo:cancel": "ts-node -P scripts/tsconfig.json scripts/demo-cancel.ts"
   },
   "dependencies": {
     "@anchor-lang/core": "1.1.2"

@@ -27,6 +27,7 @@ Escrow dla zleceń freelancerskich **bez arbitra**. Spory zastępują terminy za
 3. Klient zatwierdza (z `Funded` lub `Delivered`) → wypłata do wykonawcy → `Released`.
 4. Klient milczy po upływie okna akceptacji → wykonawca odbiera sam → `Released`.
 5. Wykonawca nie dostarczył przed terminem → klient odzyskuje środki → `Refunded`.
+5a. Wykonawca może w każdej chwili (`Funded`, `Delivered`, `Frozen`) sam, jednostronnie, oddać klientowi całe saldo skarbca (`cancel_by_freelancer`) bez spalania → `Refunded`. Bezpieczne dla bodźców: traci tylko ten, kto podpisuje.
 6. Klient odrzuca dostawę w oknie akceptacji → `Frozen` (zapis `frozen_at`). Zaczyna się okno sporu (`dispute_window_secs`, ustawiane w `create`).
 7. W oknie sporu którakolwiek strona proponuje podział (`propose_settlement`, udział wykonawcy w bps); druga strona może go zaakceptować (`accept_settlement`) → skarbiec dzielony, `Settled`. Nowa propozycja nadpisuje starą. Akceptacja ma decay: część skarbca, proporcjonalna do czasu od zamrożenia (`saldo * elapsed / dispute_window_secs`), jest najpierw spalana (0% zaraz po `reject`, 100% w chwili końca okna, ciągle z `burn_if_unsettled`), a resztę dzieli się wg bps. Opłaca się więc dogadać szybko.
 8. Okno sporu minęło bez ugody → każdy może wywołać `burn_if_unsettled` → całe saldo skarbca spalone, `Burned`. Nikt (także autor) nie zyskuje na sporze.
@@ -49,13 +50,14 @@ Rozmiar konta jest stały (235 bajtów danych, pilnuje tego asercja w `state.rs`
 | `release` | klient | state = Funded lub Delivered | skarbiec → wykonawca, `Released` |
 | `claim_if_silent` | wykonawca | state = Delivered, now > delivered_at + review_window | skarbiec → wykonawca, `Released` |
 | `refund_if_late` | klient | state = Funded, now > deadline | skarbiec → klient, `Refunded` |
+| `cancel_by_freelancer` | wykonawca | state = Funded, Delivered lub Frozen (bez warunków czasowych) | skarbiec → klient w całości, bez burn, zerowanie propozycji ugody, `Refunded` |
 | `reject` | klient | state = Delivered, now <= delivered_at + review_window | `Frozen`, zapis `frozen_at`, środki zostają |
 | `propose_settlement(freelancer_bps)` | klient lub wykonawca | state = Frozen, now <= frozen_at + dispute_window, bps <= 10000 | zapis proponującego i bps (nadpisuje poprzednią) |
 | `accept_settlement(freelancer_bps)` | strona inna niż proponujący | Frozen, jest propozycja, bps = zapisany, w oknie sporu | najpierw burn `saldo*elapsed/window`, potem wykonawca: reszta*bps/10000, klient: reszta - wykonawca, `Settled` |
 | `burn_if_unsettled` | ktokolwiek (tylko opłata za tx) | Frozen, now > frozen_at + dispute_window | spalenie całego salda skarbca, `Burned` |
 | `close_escrow` | klient | stan Released, Refunded, Settled lub Burned, saldo skarbca = 0 | zamyka skarbiec i konto `Escrow`, cały rent wraca do klienta |
 
-Każda instrukcja sprawdza stan przez jedną funkcję `Escrow::require_state`. W `Frozen` działają tylko `propose_settlement`, `accept_settlement` i `burn_if_unsettled`; wypłat `release`, `claim_if_silent`, `refund_if_late` ani `mark_delivered` stan `Frozen` nie akceptuje.
+Każda instrukcja sprawdza stan przez jedną funkcję `Escrow::require_state`. W `Frozen` działają tylko `propose_settlement`, `accept_settlement`, `burn_if_unsettled` i `cancel_by_freelancer`; wypłat `release`, `claim_if_silent`, `refund_if_late` ani `mark_delivered` stan `Frozen` nie akceptuje.
 
 **Uprawnienia:** brak admina. Po deployu na devnet — odebrać upgrade authority (`solana program set-upgrade-authority --final`).
 
@@ -73,6 +75,7 @@ Dwa portfele z SOL i tokenem testowym na devnecie. Pokazać ścieżkę z zatwier
 ## Odpowiedzi dla jury (przygotować)
 - Gdzie znika pośrednik w kodzie? → instrukcje wypłat i PDA jako właściciel skarbca.
 - Co gdy strona zniknie? → `claim_if_silent` / `refund_if_late`.
+- Co gdy obie strony chcą się rozstać? → Klient może zwolnić wykonawcę przez `release` albo ugodę, a wykonawca sam oddaje całe saldo przez `cancel_by_freelancer` (stan `Refunded`, zero spalenia, w każdej chwili życia umowy). Traci tylko ten, kto podpisuje, więc nikt nie może tego wykorzystać przeciw drugiej stronie, a przed terminem klient nie musi czekać do deadline'u.
 - Co gdy jest spór? → `reject` zamraża środki; strony mają okno na ugodę (podział w bps), a bez ugody każdy może spalić środki. Nikt, także autor, nie zyskuje na sporze, więc nie ma arbitra.
 - Czy autor może coś zmienić? → brak admina, upgrade authority odebrany.
 - Dlaczego nie baza danych? → w bazie operator może cofnąć lub zablokować wypłatę; tu nikt.

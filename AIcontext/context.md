@@ -23,6 +23,13 @@
 ## Blokery
 - Brak.
 
+## Zadanie 6: cancel_by_freelancer (2026-10-04)
+- Program: `cancel_by_freelancer` (wykonawca, Funded/Delivered/Frozen, cała zawartość skarbca → klient bez burn, czyści propozycję, stan Refunded); layout konta bez zmian. `anchor test`: 40 zielonych (33 + 7 nowych). Front: przycisk dla wykonawcy z potwierdzeniem w UI, etykieta „Rezygnacja wykonawcy” w historii, IDL i typy w `app/src/idl/` bajt w bajt z buildem; `tsc` i `vite build` czyste.
+- Devnet = main (commit `c454642`): `solana program extend` o 12 120 B (konto 311 976 → 324 096 B, `.so` 322 048 B), upgrade w slocie 507167004, authority bez zmian (NIE odebrane). `solana program dump` vs `target/deploy/escrow.so`: pierwsze 322 048 B identyczne, reszta to zera. Brak osieroconych buforów.
+- Saldo portfela dev: **przed 2,888178 SOL**, po `extend` 2,826603, po upgrade'ie 2,823958 (koszt netto ok. 0,064 SOL: rent rozszerzenia 0,0615 plus opłaty), po `demo:cancel` 2,823958 (płaci klient demo).
+- `yarn demo:cancel` na devnecie: 4 transakcje `finalized` (linki w README): create → mark_delivered → cancel_by_freelancer → close_escrow. Klient 479,300002 → 479,300002 tokenów (odzyskał całe 100), supply bez zmian (zero burn), rent zwrócony 3 373 120 lamportów (netto 3 368 120).
+- Upgrade poszedł przez Helius RPC z `app/.env` (publiczny RPC devnetu zwracał 429); klucz nie trafił do gita, configu CLI ani logów.
+
 ## Upgrade na devnecie (2026-10-03, na znak Piotra)
 - Devnet = kod z `d8a5207` (decay w `accept_settlement`, `close_escrow`). Bajty programu na łańcuchu mają ten sam SHA-256 co `target/deploy/escrow.so` (`ce8b5d79…260c`); program ma 311 976 B (było 291 952 B, `solana program extend` o 20 024 B).
 - Upgrade authority nadal przy portfelu dev `2uKvpTL9ErJLNaL1HYa3oMfFBECNZQVQDpqqdUySKx3a` (NIE odebrane). Slot upgrade'u 507079159.

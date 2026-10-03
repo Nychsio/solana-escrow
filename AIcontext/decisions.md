@@ -47,6 +47,9 @@ Format: `data | decyzja | dlaczego | kto`
 2026-10-04 | Zależność frontu: @fontsource/league-spartan (600, 700) | nagłówki; fonty hostowane lokalnie, bez Google Fonts | Piotr
 2026-10-04 | Zależność frontu: @fontsource/inter (400, 500, 600) | tekst UI; lokalnie | Piotr
 2026-10-04 | Zależność frontu: @fontsource/jetbrains-mono (400, 700) | hashe, adresy, kwoty; lokalnie | Piotr
+2026-10-04 | cancel_by_freelancer: wykonawca jednostronnie oddaje klientowi całe saldo skarbca bez spalania, w stanach Funded/Delivered/Frozen, bez warunków czasowych, kończy w Refunded (bez nowego stanu i pól) | bezpieczne dla bodźców, bo traci tylko ten, kto podpisuje; zamyka dwie dziury: (a) przed terminem klient musiał czekać do deadline'u, (b) ugoda "0% dla wykonawcy" i tak traciła część na decay | Piotr
+2026-10-04 | Upgrade devnet przez Helius RPC (klucz z app/.env, tylko przez zmienną środowiskową, bez zapisu do configu i bez wypisywania) | publiczny RPC devnetu zwracał 429 na każde zapytanie | Claude Code
+2026-10-04 | Potwierdzenie rezygnacji w UI jako dwukrokowy panel w Actions.tsx (bez window.confirm i bez nowych bibliotek) | zadanie zabraniało window.confirm, a istniejące potwierdzenia (reject, burn) go używają | Claude Code
 
 ## Użyte komponenty zewnętrzne (disclosure)
 - Solana (devnet), Solana CLI

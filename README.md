@@ -4,7 +4,7 @@ Escrow dla zleceń freelancerskich **bez arbitra**, na Solanie (Anchor). Warunki
 
 ## Stan
 
-Zaimplementowana pełna logika escrow: `create`, `mark_delivered`, `release`, `claim_if_silent`, `refund_if_late`, `reject` oraz rozstrzyganie sporów bez arbitra: `propose_settlement`, `accept_settlement`, `burn_if_unsettled`, oraz `close_escrow` (odzyskanie rentu).
+Zaimplementowana pełna logika escrow: `create`, `mark_delivered`, `release`, `claim_if_silent`, `refund_if_late`, `cancel_by_freelancer`, `reject` oraz rozstrzyganie sporów bez arbitra: `propose_settlement`, `accept_settlement`, `burn_if_unsettled`, oraz `close_escrow` (odzyskanie rentu).
 
 Program jest wdrożony na devnecie (wersja z decay i `close_escrow`). Frontend (`app/`) działa na devnecie. Jeszcze nie zrobione: odebranie upgrade authority.
 
@@ -12,7 +12,7 @@ Program jest wdrożony na devnecie (wersja z decay i `close_escrow`). Frontend (
 
 - ID programu: `6KsiGDi8o9E1qNWxpzdew2CkDyQFqfeoLs79fAJ457D8`
 - Explorer: https://explorer.solana.com/address/6KsiGDi8o9E1qNWxpzdew2CkDyQFqfeoLs79fAJ457D8?cluster=devnet
-- Wdrożona wersja = kod z commita `d8a5207` (decay w ugodzie, `close_escrow`); [transakcja upgrade'u]( https://explorer.solana.com/tx/mCRuYedtKyH6Wv5BZb4EBSWTCVxGRvB3T5xYb8VrDSCyA97xzD1BbDT5WzhXyaLTCGjtCscZWcC4NbQvTDhU1kJ?cluster=devnet ). Bajty programu na łańcuchu są identyczne z `target/deploy/escrow.so` z tego commita.
+- Wdrożona wersja = kod z commita `c454642` (dodaje `cancel_by_freelancer` do wersji z decay i `close_escrow`); [transakcja upgrade'u](https://explorer.solana.com/tx/ez3KXxVuptG9V5v1UD5n2CR8Vzzg7jqALRXxsks4J1kZi8vGUojqR2FMqzP9swhJ1AetdSDh1DmaRnMJNNMAzC2?cluster=devnet). Pierwsze 322 048 B programu na łańcuchu są identyczne z `target/deploy/escrow.so`.
 - Ścieżka akceptacji (`yarn demo:flow`): [create](https://explorer.solana.com/tx/64342DqfyBnGaGXxXoFtr8Z7i5retakZ4jtKZHZo9uuVcB7odaf22getZWkMVfKUkzyfMzUkCDWb5kLkvsScg6sP?cluster=devnet) → [mark_delivered](https://explorer.solana.com/tx/5qUfyvZUpm2mKnkSoN6wdENvChr1Piv4CNB24pwDn7WqcJBVmSN1x3o1CzBJrm6WVmqJkcZvMLhjkSyiuHVuxiuf?cluster=devnet) → [release](https://explorer.solana.com/tx/39niP11eh279x6AKH3mm2cZgZsV4d1Xc54CWEZ7bW6gdMjYcnGT2QVGncJHjST1Kn6JB6zp8BeT2WCte9HeGtZC7?cluster=devnet)
 - Ścieżka sporu (`yarn demo:dispute`): create → mark_delivered → reject → propose → accept (z decay, w przykładzie spalone 38,3%) → close_escrow (zwrot rentu):
   1. [create](https://explorer.solana.com/tx/UNH8SnddpXu6QJQrmdkRnxgpRM4YMGf245nVMXHEAiG35CB6QHSp5YJU2GqXT9xxDS6aYqcjnHop2WS2EUN3pve?cluster=devnet)
@@ -21,9 +21,10 @@ Program jest wdrożony na devnecie (wersja z decay i `close_escrow`). Frontend (
   4. [propose_settlement](https://explorer.solana.com/tx/5Yumo4y39KkFRjeKG6voiqLX1ycqQmxHRm5CiLvMdkiCH6N46ordpGpb4RVKsCdQLjjvFrrqtztw65bmScTaqNgo?cluster=devnet)
   5. [accept_settlement](https://explorer.solana.com/tx/3LA8NQCbvHaGa4uPrhbAAE1BJgqJZJfBqmQ2mMzyfEPF2vD4s5K7NJcbsrhbB7rUQ1gZduR8kH8dCVV6RpQuv3cp?cluster=devnet)
   6. [close_escrow](https://explorer.solana.com/tx/D3dSe63QmgjpJXJWughKLeZv33ztXzzBK6cXPG5FRhBTDag81w7iktEsyQQ6pVQUHhcCrjapUidRHYB1TKpshNj?cluster=devnet)
+- Ścieżka rezygnacji wykonawcy (`yarn demo:cancel`): [create](https://explorer.solana.com/tx/57ZEQF1aEzQeoCf99FgZCEXyjNubrMtkFuVNsYcz77EbUHSmMsccsGd7UWeushcGK3VosCs5Sig9FM5NQozqovbB?cluster=devnet) → [mark_delivered](https://explorer.solana.com/tx/2cqMfWMtEuh1r3AdJYt2rb1UVdFtL8sD1BFZzxv8xFzvbx6nBqPeskwzhjJqvXJayrVcF5YXqeP6NmqYWsSgEEU2?cluster=devnet) → [cancel_by_freelancer](https://explorer.solana.com/tx/26HGeuxYjw8bVBLxPRt5YSCau7YFXzNKw11wqmUEYk574g9D1xQa5VkKv6CJMxs7YkYU4iExhjHkVGF9t4waYask?cluster=devnet) → [close_escrow](https://explorer.solana.com/tx/5o2cr5Yp1AUg3mykEt8Pk2ZDPoAzuZtWmax5NpJUNNqE34GXtbPpr4qqdaTPTMYEv5hr2krkDPBsJegdef1LP73T?cluster=devnet). Klient odzyskał 100 tokenów, nic nie spalono.
 - Upgrade authority jest na razie przy portfelu deweloperskim; zostanie odebrane przy code freeze (`solana program set-upgrade-authority --final`).
 
-Powtórzenie demo na devnecie: `yarn demo:setup` (portfele i mint w `.demo-keys/`, poza gitem), potem `yarn demo:flow` i `yarn demo:dispute` (wypisują linki do Explorera i sprawdzają statusy przez RPC).
+Powtórzenie demo na devnecie: `yarn demo:setup` (portfele i mint w `.demo-keys/`, poza gitem), potem `yarn demo:flow`, `yarn demo:dispute` i `yarn demo:cancel` (wypisują linki do Explorera i sprawdzają statusy przez RPC).
 
 ## Co gdzie leży
 
@@ -36,7 +37,7 @@ Powtórzenie demo na devnecie: `yarn demo:setup` (portfele i mint w `.demo-keys/
 | `programs/escrow/src/instructions/delivery.rs` | `mark_delivered`, `reject` |
 | `programs/escrow/src/instructions/close.rs` | `close_escrow`: zamknięcie skarbca i konta po zakończeniu umowy |
 | `programs/escrow/src/instructions/dispute.rs` | `propose_settlement`, `accept_settlement`, `burn_if_unsettled` |
-| `programs/escrow/src/instructions/payout.rs` | `release`, `claim_if_silent`, `refund_if_late` oraz `pay_from_vault` (jedyna funkcja wypłacająca ze skarbca) |
+| `programs/escrow/src/instructions/payout.rs` | `release`, `claim_if_silent`, `refund_if_late`, `cancel_by_freelancer` oraz `pay_from_vault` (jedyna funkcja wypłacająca ze skarbca) |
 | `scripts/` | Skrypty demo na devnecie: `demo-setup.ts` (portfele, mint, tokeny), `demo-flow.ts` (create → mark_delivered → release), `export-keys.ts` (klucze demo w base58 do Phantoma, tylko terminal) |
 | `app/` | Frontend (Vite + React + TS + Wallet Adapter): czyta konta z chaina i buduje transakcje, bez backendu |
 | `tests/escrow.ts` | Testy wszystkich ścieżek na localnecie |
@@ -53,6 +54,7 @@ Powtórzenie demo na devnecie: `yarn demo:setup` (portfele i mint w `.demo-keys/
 | `release` | klient | `Funded` lub `Delivered` | skarbiec → wykonawca, `Released` |
 | `claim_if_silent` | wykonawca | `Delivered`, `now > delivered_at + review_window_secs` | skarbiec → wykonawca, `Released` |
 | `refund_if_late` | klient | `Funded`, `now > deadline_ts` | skarbiec → klient, `Refunded` |
+| `cancel_by_freelancer` | wykonawca | `Funded`, `Delivered` lub `Frozen` (bez warunków czasowych) | cała zawartość skarbca → klient bez spalania, czyści propozycję ugody, `Refunded` |
 | `reject` | klient | `Delivered`, `now <= delivered_at + review_window_secs` | `Frozen`, zapis `frozen_at`, środki zostają w skarbcu |
 | `propose_settlement(freelancer_bps)` | klient lub wykonawca | `Frozen`, `now <= frozen_at + dispute_window_secs`, `bps <= 10000` | zapis proponującego i podziału, nadpisuje poprzednią propozycję |
 | `accept_settlement(freelancer_bps)` | strona inna niż proponujący | `Frozen`, jest propozycja, `bps` = zapisany, w oknie sporu | najpierw spalany jest `saldo * elapsed / dispute_window_secs` (decay), z reszty wykonawca dostaje `reszta * bps / 10000`, klient resztę, `Settled` |
