@@ -84,3 +84,5 @@ Ustawienia, które działają: RPC Helius w `app/.env` (VITE_RPC_URL, poza gitem
 - Restyle frontu wg `design-ref.md` (2026-10-04): tylko CSS, className i `data-ov`, logika bez zmian. Fonty: systemowe; Inter/JetBrains Mono z Google Fonts czekają na zgodę Piotra (wtedy `<link>` w `index.html` + wpis w decisions.md).
 
 - Restyle v2 (2026-10-04): płaski ciemny teal + limonka (#c8f51a), pełne karty, ikony lucide-react, fonty @fontsource (lokalnie); glassmorphism usunięty. Logika .tsx bez zmian. Zastępuje restyle glass z design-ref.
+
+- Restyle v3 (2026-10-04): hero + siatka 2 kolumn (Akcje/Dostawa/Historia | Szczegóły/Czas), icon badge, ścieżka stanów, karty listy, toasty (max 3, sukces 8 s), Phosphor duotone, simple-icons (Solana, GitHub). Logiki .tsx nie zmieniono (poza auto-zamykaniem toastów). Brak logo Phantoma w simple-icons: ikona Wallet.

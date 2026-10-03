@@ -50,6 +50,8 @@ Format: `data | decyzja | dlaczego | kto`
 2026-10-04 | cancel_by_freelancer: wykonawca jednostronnie oddaje klientowi całe saldo skarbca bez spalania, w stanach Funded/Delivered/Frozen, bez warunków czasowych, kończy w Refunded (bez nowego stanu i pól) | bezpieczne dla bodźców, bo traci tylko ten, kto podpisuje; zamyka dwie dziury: (a) przed terminem klient musiał czekać do deadline'u, (b) ugoda "0% dla wykonawcy" i tak traciła część na decay | Piotr
 2026-10-04 | Upgrade devnet przez Helius RPC (klucz z app/.env, tylko przez zmienną środowiskową, bez zapisu do configu i bez wypisywania) | publiczny RPC devnetu zwracał 429 na każde zapytanie | Claude Code
 2026-10-04 | Potwierdzenie rezygnacji w UI jako dwukrokowy panel w Actions.tsx (bez window.confirm i bez nowych bibliotek) | zadanie zabraniało window.confirm, a istniejące potwierdzenia (reject, burn) go używają | Claude Code
+2026-10-04 | lucide-react usunięty, zastąpiony @phosphor-icons/react (duotone) | spójny zestaw ikon w drugiej iteracji wyglądu | Piotr
+2026-10-04 | Zależność frontu: simple-icons (tylko logotypy Solana i GitHub, SVG path inline) | logo marek bez własnych grafik; Phantoma nie ma w paczce, w przycisku portfela użyta ikona Phosphor Wallet | Piotr
 
 ## Użyte komponenty zewnętrzne (disclosure)
 - Solana (devnet), Solana CLI
@@ -61,6 +63,6 @@ Format: `data | decyzja | dlaczego | kto`
 - Surfpool 1.6.0 (lokalny walidator uruchamiany przez `anchor test`)
 - Gemini (research mechanizmów sporu, bez generowania kodu)
 - ts-node (uruchamianie skryptów demo), Solana Explorer (linki do transakcji)
-- Frontend: lucide-react, @fontsource/{league-spartan,inter,jetbrains-mono}, Vite, React, TypeScript, @vitejs/plugin-react, @solana/wallet-adapter-base / -react / -react-ui, buffer, Web Crypto API (SHA-256), Phantom (portfel do demo)
+- Frontend: @phosphor-icons/react, simple-icons, @fontsource/{league-spartan,inter,jetbrains-mono}, Vite, React, TypeScript, @vitejs/plugin-react, @solana/wallet-adapter-base / -react / -react-ui, buffer, Web Crypto API (SHA-256), Phantom (portfel do demo)
 - Playwright + Chromium (lokalny test UI z atrapą RPC, poza repo)
 - Helius (RPC devnet, free tier; wymienny przez VITE_RPC_URL)
