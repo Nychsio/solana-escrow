@@ -66,4 +66,4 @@ Ustawienia, które działają: RPC Helius w `app/.env` (VITE_RPC_URL, poza gitem
 1. Hash z pliku: naprawione w kodzie (try/catch z komunikatem + reset `value`); przyczyny u Piotra nie udało się odtwworzyć (patrz log.md), do potwierdzenia w przeklikaniu.
 2. Po `close_escrow`: naprawione (ekran "Umowa zamknięta" + historia + link do listy, polling zatrzymany).
 3. Wygasły blockhash: naprawione w kodzie (jedno ponowienie + toast "Ponawiam…"), do potwierdzenia w przeklikaniu (zwlekanie z podpisem >90 s).
-4. Potem: CSS (zadanie 6), README „Dowód na devnecie”, odebranie upgrade authority (--final), PDF, wideo.
+4. CSS i README (Frontend, Phantom Testnet): zrobione. Zostaje: README „Dowód na devnecie”, odebranie upgrade authority (--final), PDF, wideo.
