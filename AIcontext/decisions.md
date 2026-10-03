@@ -42,6 +42,8 @@ Format: `data | decyzja | dlaczego | kto`
 2026-10-03 | Upgrade devnet: najpierw `solana program extend` o 20 024 B, potem `anchor deploy`; upgrade authority zostaje | nowy program jest większy od starego; odebranie authority przy code freeze | Piotr
 2026-10-03 | scripts/demo-dispute.ts i weryfikacja statusów transakcji przez RPC (verifySignatures) w skryptach demo | dowód na żywo dla decay i close_escrow, bez polegania na samym wydruku | Piotr
 
+2026-10-03 | RPC devnet: Helius (free tier) przez VITE_RPC_URL, klucz tylko w app/.env (poza gitem); domyślnie publiczny api.devnet.solana.com | publiczny RPC devnetu zwracał 429 przy demo dwoma portfelami; RPC tylko przekazuje transakcje, o niczym nie decyduje i można go podmienić jedną zmienną | Piotr
+
 ## Użyte komponenty zewnętrzne (disclosure)
 - Solana (devnet), Solana CLI
 - Anchor (anchor-lang, anchor-spl)
@@ -54,3 +56,4 @@ Format: `data | decyzja | dlaczego | kto`
 - ts-node (uruchamianie skryptów demo), Solana Explorer (linki do transakcji)
 - Frontend: Vite, React, TypeScript, @vitejs/plugin-react, @solana/wallet-adapter-base / -react / -react-ui, buffer, Web Crypto API (SHA-256), Phantom (portfel do demo)
 - Playwright + Chromium (lokalny test UI z atrapą RPC, poza repo)
+- Helius (RPC devnet, free tier; wymienny przez VITE_RPC_URL)
