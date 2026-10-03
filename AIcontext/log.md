@@ -3,3 +3,4 @@
 Format: `data | co | pliki | commit`
 
 2026-10-03 | Zadanie 1: szkielet Anchor, konto Escrow, instrukcja create, testy localnet, README | programs/escrow/src/lib.rs, tests/escrow.ts, README.md, Anchor.toml, Cargo.toml, package.json | 7e804e8
+2026-10-03 | Zadanie 2: mark_delivered, release, claim_if_silent, refund_if_late, reject, stan Frozen, podział na moduły, testy wszystkich ścieżek | programs/escrow/src/{lib,state,errors}.rs, programs/escrow/src/instructions/*, tests/escrow.ts, README.md, AIcontext/* | e498f60
