@@ -1,0 +1,15 @@
+body { font-family: system-ui, sans-serif; margin: 0; }
+header { display: flex; gap: 1rem; align-items: center; padding: .5rem 1rem; border-bottom: 1px solid #ccc; flex-wrap: wrap; }
+main { padding: 1rem; max-width: 900px; }
+.badge { background: #9945ff; color: #fff; padding: 2px 8px; border-radius: 4px; }
+.addr code, code { cursor: pointer; }
+.hash { word-break: break-all; font-size: 12px; }
+.muted { color: #666; }
+.error { color: #b00; }
+td { padding: 2px 8px; vertical-align: top; }
+button { margin: 2px; }
+.toasts { position: fixed; right: 1rem; bottom: 1rem; display: flex; flex-direction: column; gap: .5rem; max-width: 380px; }
+.toast { background: #fff; border: 1px solid #999; padding: .5rem; }
+.toast.ok { border-color: #2a2; }
+.toast.err { border-color: #c22; }
+.panel { border: 1px solid #ccc; padding: .75rem; margin: .75rem 0; }

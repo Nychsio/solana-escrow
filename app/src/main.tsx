@@ -1,0 +1,12 @@
+import "./polyfills";
+import "@solana/wallet-adapter-react-ui/styles.css";
+import "./style.css";
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import App from "./App";
+
+createRoot(document.getElementById("root")!).render(
+  <StrictMode>
+    <App />
+  </StrictMode>
+);

@@ -1,0 +1,155 @@
+import { useConnection, useWallet } from "@solana/wallet-adapter-react";
+import { PublicKey } from "@solana/web3.js";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Addr } from "../components/Addr";
+import { txUrl } from "../config";
+import { countdown, fmtDate, fromBase, toHex } from "../format";
+import { stateOf, useChainNow, useProgram, vaultOf, type EscrowAccount } from "../program";
+
+type HistItem = { sig: string; ok: boolean; time: number | null; ix: string };
+
+export type EscrowView = {
+  pda: PublicKey;
+  esc: EscrowAccount;
+  now: number;
+  role: "client" | "freelancer" | null;
+  reload: () => Promise<void>;
+};
+
+const TIMELINE = "Funded → Delivered → Released  |  Funded → Refunded  |  Delivered → Frozen → Settled / Burned";
+
+export function EscrowPage({ address }: { address: string }) {
+  const program = useProgram();
+  const { connection } = useConnection();
+  const { publicKey } = useWallet();
+  const now = useChainNow();
+  const pda = useMemo(() => {
+    try {
+      return new PublicKey(address);
+    } catch {
+      return null;
+    }
+  }, [address]);
+  const [esc, setEsc] = useState<EscrowAccount | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [vaultBal, setVaultBal] = useState<string | null>(null);
+  const [history, setHistory] = useState<HistItem[]>([]);
+
+  const loadAccount = useCallback(async () => {
+    if (!pda) return;
+    try {
+      const e = await program.account.escrow.fetch(pda);
+      setEsc(e);
+      setError(null);
+      const bal = await connection.getTokenAccountBalance(vaultOf(e.mint, pda)).catch(() => null);
+      setVaultBal(bal ? bal.value.uiAmountString ?? "0" : null);
+    } catch (e) {
+      setError(`Nie znaleziono umowy pod tym adresem (${(e as Error).message})`);
+    }
+  }, [pda, program, connection]);
+
+  // Transaction history read straight from the chain: signatures of the escrow account,
+  // instruction name taken from the program logs.
+  const loadHistory = useCallback(async () => {
+    if (!pda) return;
+    const sigs = await connection.getSignaturesForAddress(pda, { limit: 25 });
+    const txs = await connection.getTransactions(
+      sigs.map((s) => s.signature),
+      { maxSupportedTransactionVersion: 0, commitment: "confirmed" }
+    );
+    setHistory(
+      sigs.map((s, i) => ({
+        sig: s.signature,
+        ok: !s.err,
+        time: s.blockTime ?? null,
+        ix:
+          txs[i]?.meta?.logMessages
+            ?.map((l) => l.match(/^Program log: Instruction: (\w+)/)?.[1])
+            .find(Boolean) ?? "?",
+      }))
+    );
+  }, [pda, connection]);
+
+  const reload = useCallback(async () => {
+    await loadAccount();
+    await loadHistory().catch(() => {});
+  }, [loadAccount, loadHistory]);
+
+  useEffect(() => {
+    reload();
+    const t = setInterval(loadAccount, 10_000);
+    return () => clearInterval(t);
+  }, [reload, loadAccount]);
+
+  if (!pda) return <p>Nieprawidłowy adres umowy.</p>;
+  if (error) return <p className="error">{error}</p>;
+  if (!esc) return <p>Ładowanie…</p>;
+
+  const state = stateOf(esc);
+  const me = publicKey?.toBase58();
+  const role = me === esc.client.toBase58() ? "client" : me === esc.freelancer.toBase58() ? "freelancer" : null;
+  const deadline = esc.deadlineTs.toNumber();
+  const reviewEnd = esc.deliveredAt ? esc.deliveredAt.toNumber() + esc.reviewWindowSecs.toNumber() : null;
+  const frozenAt = esc.frozenAt.toNumber();
+  const disputeEnd = frozenAt > 0 ? frozenAt + esc.disputeWindowSecs.toNumber() : null;
+  const hash = toHex(esc.deliverableHash);
+  const hasHash = /[1-9a-f]/.test(hash);
+  const view: EscrowView = { pda, esc, now, role, reload };
+  void view; // used by action panels (next step)
+
+  return (
+    <div>
+      <h2>Umowa <Addr value={pda.toBase58()} /></h2>
+      <p>
+        Link dla drugiej strony:{" "}
+        <code onClick={() => navigator.clipboard.writeText(location.href)}>{location.href}</code>
+      </p>
+      <p>
+        Twoja rola: <b>{role === "client" ? "klient" : role === "freelancer" ? "wykonawca" : "obserwator"}</b>
+      </p>
+
+      <h3>Stan: {state.toUpperCase()}</h3>
+      <p className="muted">{TIMELINE}</p>
+
+      <table>
+        <tbody>
+          <tr><td>Klient</td><td><Addr value={esc.client.toBase58()} /></td></tr>
+          <tr><td>Wykonawca</td><td><Addr value={esc.freelancer.toBase58()} /></td></tr>
+          <tr><td>Token</td><td><Addr value={esc.mint.toBase58()} /></td></tr>
+          <tr><td>Kwota umowy</td><td>{fromBase(esc.amount)}</td></tr>
+          <tr><td>Saldo skarbca (na żywo)</td><td>{vaultBal ?? "?"} <Addr value={vaultOf(esc.mint, pda).toBase58()} /></td></tr>
+          <tr>
+            <td>Termin dostawy</td>
+            <td>{fmtDate(deadline)} {state === "funded" && <b>({countdown(deadline - now)})</b>}</td>
+          </tr>
+          <tr>
+            <td>Okno akceptacji</td>
+            <td>
+              {esc.reviewWindowSecs.toString()} s
+              {reviewEnd && <> · do {fmtDate(reviewEnd)} {state === "delivered" && <b>({countdown(reviewEnd - now)})</b>}</>}
+            </td>
+          </tr>
+          <tr>
+            <td>Okno sporu</td>
+            <td>
+              {esc.disputeWindowSecs.toString()} s
+              {disputeEnd && <> · do {fmtDate(disputeEnd)} {state === "frozen" && <b>({countdown(disputeEnd - now)})</b>}</>}
+            </td>
+          </tr>
+          <tr><td>Hash dostawy (SHA-256)</td><td><code className="hash">{hasHash ? hash : "—"}</code></td></tr>
+        </tbody>
+      </table>
+
+      <h3>Historia transakcji</h3>
+      <button onClick={() => loadHistory()}>Odśwież</button>
+      <ul>
+        {history.map((h) => (
+          <li key={h.sig}>
+            {h.time ? fmtDate(h.time) : "?"} · <b>{h.ix}</b> {h.ok ? "" : "(błąd)"} ·{" "}
+            <a href={txUrl(h.sig)} target="_blank" rel="noreferrer">{h.sig.slice(0, 12)}…</a>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
