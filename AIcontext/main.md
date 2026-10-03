@@ -23,31 +23,39 @@ Escrow dla zleceń freelancerskich **bez arbitra**. Spory zastępują terminy za
 
 ## Zasady umowy (logika on-chain)
 1. Klient tworzy umowę i wpłaca kwotę do skarbca → `Funded`.
-2. Wykonawca zgłasza dostawę przed terminem → `Delivered` (startuje okno akceptacji).
-3. Klient zatwierdza → wypłata do wykonawcy → `Released`.
+2. Wykonawca zgłasza dostawę przed terminem i zapisuje hash dostawy (`deliverable_hash`) → `Delivered` (startuje okno akceptacji).
+3. Klient zatwierdza (z `Funded` lub `Delivered`) → wypłata do wykonawcy → `Released`.
 4. Klient milczy po upływie okna akceptacji → wykonawca odbiera sam → `Released`.
 5. Wykonawca nie dostarczył przed terminem → klient odzyskuje środki → `Refunded`.
+6. Klient odrzuca dostawę w oknie akceptacji → `Frozen`. Środki zostają w skarbcu i żadna instrukcja nie może ich wyjąć. Bez arbitra i bez ugody (rozstrzyganie sporów do dodania później).
 
 ## Architektura programu
 **Konto `Escrow`** (PDA, seeds: `["escrow", client, id_u64]`):
-`client, freelancer, mint, amount, deadline_ts, review_window_secs, delivered_at: Option<i64>, state, bump`
+`client, freelancer, mint, id, amount, deadline_ts, review_window_secs, delivered_at: Option<i64>, state, bump, deliverable_hash: [u8; 32], _reserved: [u8; 64]`
 
-**Skarbiec:** konto tokenowe (ATA) z authority = PDA `Escrow`. Wypłacać może tylko program.
+`_reserved` to miejsce na przyszłą logikę rozstrzygania sporów (bez migracji kont).
+
+**Stany:** `Funded, Delivered, Released, Refunded, Frozen`.
+
+**Skarbiec:** konto tokenowe (ATA) z authority = PDA `Escrow`. Wypłacać może tylko program, podpisem PDA, przez jedną funkcję `pay_from_vault`.
 
 **Instrukcje:**
-| Instrukcja | Kto podpisuje | Warunek |
-|---|---|---|
-| `create` | klient | amount > 0, deadline > now |
-| `mark_delivered` | wykonawca | state = Funded, now <= deadline |
-| `release` | klient | state = Delivered |
-| `claim_if_silent` | wykonawca | state = Delivered, now > delivered_at + review_window |
-| `refund_if_late` | klient | state = Funded, now > deadline |
+| Instrukcja | Kto podpisuje | Warunek | Skutek |
+|---|---|---|---|
+| `create` | klient | amount > 0, deadline > now | wpłata do skarbca, `Funded` |
+| `mark_delivered(deliverable_hash)` | wykonawca | state = Funded, now <= deadline | zapis `delivered_at` i hasha, `Delivered` |
+| `release` | klient | state = Funded lub Delivered | skarbiec → wykonawca, `Released` |
+| `claim_if_silent` | wykonawca | state = Delivered, now > delivered_at + review_window | skarbiec → wykonawca, `Released` |
+| `refund_if_late` | klient | state = Funded, now > deadline | skarbiec → klient, `Refunded` |
+| `reject` | klient | state = Delivered, now <= delivered_at + review_window | `Frozen`, środki zostają |
+
+Każda instrukcja sprawdza stan przez jedną funkcję `Escrow::require_state`. Stanu `Frozen` nie akceptuje żadna instrukcja.
 
 **Uprawnienia:** brak admina. Po deployu na devnet — odebrać upgrade authority (`solana program set-upgrade-authority --final`).
 
 ## Plan zadań
-1. Szkielet repo + `create` + test — **w toku**
-2. `mark_delivered`, `release`, `claim_if_silent`, `refund_if_late` + testy
+1. Szkielet repo + `create` + test — **zrobione**
+2. `mark_delivered`, `release`, `claim_if_silent`, `refund_if_late`, `reject` + testy — **zrobione**
 3. Deploy na devnet, odebranie upgrade authority
 4. Frontend: połączenie portfela, widok klienta i wykonawcy
 5. (opcjonalnie) cecha wyróżniająca — do decyzji po MVP
@@ -59,6 +67,7 @@ Dwa portfele z SOL i tokenem testowym na devnecie. Pokazać ścieżkę z zatwier
 ## Odpowiedzi dla jury (przygotować)
 - Gdzie znika pośrednik w kodzie? → instrukcje wypłat i PDA jako właściciel skarbca.
 - Co gdy strona zniknie? → `claim_if_silent` / `refund_if_late`.
+- Co gdy jest spór? → `reject` zamraża środki; nikt ich nie wyjmie, więc żadna strona nie zyskuje na nieuczciwym sporze.
 - Czy autor może coś zmienić? → brak admina, upgrade authority odebrany.
 - Dlaczego nie baza danych? → w bazie operator może cofnąć lub zablokować wypłatę; tu nikt.
 - Co za tydzień? → do uzupełnienia.
