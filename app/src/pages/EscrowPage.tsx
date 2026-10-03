@@ -1,6 +1,7 @@
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Actions } from "../components/Actions";
 import { Addr } from "../components/Addr";
 import { txUrl } from "../config";
 import { countdown, fmtDate, fromBase, toHex } from "../format";
@@ -95,7 +96,6 @@ export function EscrowPage({ address }: { address: string }) {
   const hash = toHex(esc.deliverableHash);
   const hasHash = /[1-9a-f]/.test(hash);
   const view: EscrowView = { pda, esc, now, role, reload };
-  void view; // used by action panels (next step)
 
   return (
     <div>
@@ -139,6 +139,8 @@ export function EscrowPage({ address }: { address: string }) {
           <tr><td>Hash dostawy (SHA-256)</td><td><code className="hash">{hasHash ? hash : "—"}</code></td></tr>
         </tbody>
       </table>
+
+      <Actions {...view} />
 
       <h3>Historia transakcji</h3>
       <button onClick={() => loadHistory()}>Odśwież</button>
