@@ -86,3 +86,5 @@ Ustawienia, które działają: RPC Helius w `app/.env` (VITE_RPC_URL, poza gitem
 - Restyle v2 (2026-10-04): płaski ciemny teal + limonka (#c8f51a), pełne karty, ikony lucide-react, fonty @fontsource (lokalnie); glassmorphism usunięty. Logika .tsx bez zmian. Zastępuje restyle glass z design-ref.
 
 - Restyle v3 (2026-10-04): hero + siatka 2 kolumn (Akcje/Dostawa/Historia | Szczegóły/Czas), icon badge, ścieżka stanów, karty listy, toasty (max 3, sukces 8 s), Phosphor duotone, simple-icons (Solana, GitHub). Logiki .tsx nie zmieniono (poza auto-zamykaniem toastów). Brak logo Phantoma w simple-icons: ikona Wallet.
+
+- 8A (2026-10-04): UI w nazewnictwie zleceniodawca/zleceniobiorca, karta z linkiem do umowy (kopiowanie z fallbackiem), jasny hero dla kontrastu. 8B (UI escrow v2) czeka na bramkę: commit backendu v2 i potwierdzenie, że devnet to v2.
