@@ -38,9 +38,13 @@ pub struct Escrow {
     pub revealed_key: [u8; 32],
     /// When the client approved a sealed delivery (starts the key-reveal window).
     pub approved_at: i64,
+    /// Early-payment discount in basis points of `amount` (never of the bonds), at most
+    /// 1000. It applies when the client approves within `early_window_secs` of delivery.
+    pub early_discount_bps: u16,
+    pub early_window_secs: u64,
     /// Unused space left from the original 64 reserved bytes. New fields must be carved
     /// out of it so the account size (and every existing account) stays the same.
-    pub _reserved: [u8; 37],
+    pub _reserved: [u8; 27],
 }
 
 /// The account size: 235 B of the earlier layout plus 72 B for the sealed delivery fields
@@ -49,6 +53,8 @@ pub struct Escrow {
 const _: () = assert!(Escrow::INIT_SPACE == 307);
 
 pub const MAX_BPS: u16 = 10_000;
+/// Largest early-payment discount: 10% of the amount.
+pub const MAX_DISCOUNT_BPS: u16 = 1_000;
 /// Longest deadline (from now) and longest review or dispute window: 90 days.
 pub const MAX_WINDOW_SECS: i64 = 90 * 24 * 60 * 60;
 pub const SETTLE_NONE: u8 = 0;
@@ -83,6 +89,31 @@ impl Escrow {
     pub fn require_state(&self, allowed: &[EscrowState]) -> Result<()> {
         require!(allowed.contains(&self.state), ErrorCode::InvalidState);
         Ok(())
+    }
+
+    /// Whether an approval at `approval_ts` falls inside the early-payment window: a delivered
+    /// job, a discount on offer, and the approval within `early_window_secs` of the delivery.
+    /// Never after a dispute: `frozen_at != 0` means the escrow was Frozen, so a later
+    /// concession is not an early approval even if it falls inside the window.
+    pub fn is_early(&self, approval_ts: i64) -> bool {
+        let Some(delivered_at) = self.delivered_at else {
+            return false;
+        };
+        if self.early_discount_bps == 0 || self.frozen_at != 0 {
+            return false;
+        }
+        let window = i64::try_from(self.early_window_secs).unwrap_or(i64::MAX);
+        approval_ts <= delivered_at.saturating_add(window)
+    }
+
+    /// The early-payment discount owed for an approval at `approval_ts`: a share of `amount`
+    /// (never of the bonds), rounded down so any remainder stays with the freelancer.
+    pub fn early_discount(&self, approval_ts: i64) -> u64 {
+        if !self.is_early(approval_ts) {
+            return 0;
+        }
+        // amount * bps / 10000 is below amount, so it always fits in u64.
+        (u128::from(self.amount) * u128::from(self.early_discount_bps) / u128::from(MAX_BPS)) as u64
     }
 
     /// Last moment (inclusive) at which the client can still reject a delivery.

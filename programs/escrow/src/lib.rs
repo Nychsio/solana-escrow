@@ -21,6 +21,8 @@ pub mod escrow {
         review_window_secs: u64,
         dispute_window_secs: u64,
         bond_bps: u16,
+        early_discount_bps: u16,
+        early_window_secs: u64,
     ) -> Result<()> {
         instructions::create::create(
             ctx,
@@ -30,6 +32,8 @@ pub mod escrow {
             review_window_secs,
             dispute_window_secs,
             bond_bps,
+            early_discount_bps,
+            early_window_secs,
         )
     }
 
@@ -40,6 +44,8 @@ pub mod escrow {
         expected_deadline_ts: i64,
         expected_review_window_secs: u64,
         expected_dispute_window_secs: u64,
+        expected_early_discount_bps: u16,
+        expected_early_window_secs: u64,
     ) -> Result<()> {
         instructions::delivery::accept_job(
             ctx,
@@ -48,6 +54,8 @@ pub mod escrow {
             expected_deadline_ts,
             expected_review_window_secs,
             expected_dispute_window_secs,
+            expected_early_discount_bps,
+            expected_early_window_secs,
         )
     }
 

@@ -100,7 +100,9 @@ describe("escrow", () => {
     deadlineTs: number,
     reviewWindowSecs: number,
     disputeWindowSecs = 3600,
-    bondBps = 0
+    bondBps = 0,
+    earlyDiscountBps = 0,
+    earlyWindowSecs = 0
   ) => {
     const escrow = escrowPda(id);
     return program.methods
@@ -110,7 +112,9 @@ describe("escrow", () => {
         new BN(deadlineTs),
         new BN(reviewWindowSecs),
         new BN(disputeWindowSecs),
-        bondBps
+        bondBps,
+        earlyDiscountBps,
+        new BN(earlyWindowSecs)
       )
       .accountsPartial({
         client: client.publicKey,
@@ -135,6 +139,8 @@ describe("escrow", () => {
     opts: {
       accept?: boolean;
       bondBps?: number;
+      earlyDiscountBps?: number;
+      earlyWindowSecs?: number;
     } = {}
   ) => {
     const id = new BN(nextId++);
@@ -145,7 +151,9 @@ describe("escrow", () => {
       deadlineTs,
       reviewWindowSecs,
       disputeWindowSecs,
-      opts.bondBps ?? 0
+      opts.bondBps ?? 0,
+      opts.earlyDiscountBps ?? 0,
+      opts.earlyWindowSecs ?? 0
     );
     const escrow = escrowPda(id);
     if (opts.accept !== false) await acceptJob(escrow);
@@ -158,6 +166,8 @@ describe("escrow", () => {
     deadlineTs: BN;
     reviewWindowSecs: BN;
     disputeWindowSecs: BN;
+    earlyDiscountBps: number;
+    earlyWindowSecs: BN;
   };
   const termsOf = async (escrow: PublicKey): Promise<Terms> => {
     const a = await program.account.escrow.fetch(escrow);
@@ -167,6 +177,8 @@ describe("escrow", () => {
       deadlineTs: a.deadlineTs,
       reviewWindowSecs: a.reviewWindowSecs,
       disputeWindowSecs: a.disputeWindowSecs,
+      earlyDiscountBps: a.earlyDiscountBps,
+      earlyWindowSecs: a.earlyWindowSecs,
     };
   };
 
@@ -185,7 +197,9 @@ describe("escrow", () => {
         t.bondAmount,
         t.deadlineTs,
         t.reviewWindowSecs,
-        t.disputeWindowSecs
+        t.disputeWindowSecs,
+        t.earlyDiscountBps,
+        t.earlyWindowSecs
       )
       .accountsPartial({
         freelancer: signer.publicKey,
@@ -251,6 +265,7 @@ describe("escrow", () => {
         mint,
         vault: vaultOf(escrow),
         freelancerToken: destination,
+        clientToken,
         tokenProgram: TOKEN_PROGRAM_ID,
       })
       .signers([signer])
@@ -360,6 +375,7 @@ describe("escrow", () => {
         mint,
         vault: vaultOf(escrow),
         freelancerToken: destination,
+        clientToken,
         tokenProgram: TOKEN_PROGRAM_ID,
       })
       .signers([caller])
@@ -545,7 +561,9 @@ describe("escrow", () => {
       assert.equal(account.settleProposer, 0);
       assert.equal(account.settleBps, 0);
       assert.equal(account.bondAmount.toString(), "0");
-      assert.deepEqual(account.reserved, new Array(37).fill(0));
+      assert.equal(account.earlyDiscountBps, 0);
+      assert.equal(account.earlyWindowSecs.toString(), "0");
+      assert.deepEqual(account.reserved, new Array(27).fill(0));
       // 8-byte discriminator + 307 bytes (235 + the 72 B of the sealed delivery fields).
       const info = await connection.getAccountInfo(escrow);
       assert.equal(info!.data.length, 8 + 307);
@@ -571,7 +589,7 @@ describe("escrow", () => {
       const deadlineTs = (await chainNow()) + LONG;
       await expectError(
         program.methods
-          .create(id, AMOUNT, new BN(deadlineTs), new BN(3600), new BN(3600), 0)
+          .create(id, AMOUNT, new BN(deadlineTs), new BN(3600), new BN(3600), 0, 0, new BN(0))
           .accountsPartial({
             client: client.publicKey,
             freelancer: client.publicKey,
@@ -674,7 +692,7 @@ describe("escrow", () => {
     it("cannot send the payout to someone else's token account", async () => {
       const { escrow } = await open(LONG, 3600);
       await expectError(
-        release(escrow, client, clientToken),
+        release(escrow, client, strangerToken),
         "ConstraintTokenOwner"
       );
       assert.equal(await balance(vaultOf(escrow)), AMOUNT.toString());
@@ -1129,7 +1147,9 @@ describe("escrow", () => {
           new BN(deadlineTs),
           new BN(3600),
           new BN(3600),
-          0
+          0,
+          0,
+          new BN(0)
         )
         .accountsPartial({
           client: client.publicKey,
@@ -1184,7 +1204,7 @@ describe("escrow", () => {
     it("accepts a plain Token-2022 mint and pays out on release", async () => {
       const good = await newMint2022([], () => []);
       const id = new BN(nextId++);
-      const { escrow } = await createFor(good, id);
+      const { escrow, clientAta } = await createFor(good, id);
       const vault = getAssociatedTokenAddressSync(
         good,
         escrow,
@@ -1218,6 +1238,7 @@ describe("escrow", () => {
           mint: good,
           vault,
           freelancerToken: freelancerAta,
+          clientToken: clientAta,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
         })
         .signers([client])
@@ -1317,6 +1338,8 @@ describe("escrow", () => {
         { ...now, deadlineTs: now.deadlineTs.addn(1) },
         { ...now, reviewWindowSecs: now.reviewWindowSecs.addn(1) },
         { ...now, disputeWindowSecs: now.disputeWindowSecs.addn(1) },
+        { ...now, earlyDiscountBps: now.earlyDiscountBps + 1 },
+        { ...now, earlyWindowSecs: now.earlyWindowSecs.addn(1) },
       ];
       for (const wrong of variants) {
         await expectError(acceptJob(escrow, freelancer, freelancerToken, wrong), "TermsMismatch");
@@ -1341,7 +1364,7 @@ describe("escrow", () => {
       const escrow = escrowPda(id);
       const deadlineTs = (await chainNow()) + LONG;
       await program.methods
-        .create(id, AMOUNT, new BN(deadlineTs), new BN(3600), new BN(3600), BOND_BPS)
+        .create(id, AMOUNT, new BN(deadlineTs), new BN(3600), new BN(3600), BOND_BPS, 0, new BN(0))
         .accountsPartial({
           client: client.publicKey,
           freelancer: broke.publicKey,
@@ -1895,6 +1918,220 @@ describe("escrow", () => {
       await expectError(release(escrow, freelancer), "Unauthorized");
       await expectError(release(escrow, stranger), "Unauthorized");
       assert.deepEqual(await stateOf(escrow), { delivered: {} });
+    });
+  });
+
+  describe("early payment discount", () => {
+    const BOND_BPS = 2000;
+    const BOND = (AMOUNT.toNumber() * BOND_BPS) / 10000; // 50_000_000
+    const DISCOUNT_BPS = 200; // 2%
+    const DISCOUNT = (AMOUNT.toNumber() * DISCOUNT_BPS) / 10000; // 5_000_000, of the amount only
+    const bal = async (account: PublicKey) => Number(await balance(account));
+    const eventsOf = async (signature: string) => {
+      const tx = await connection.getTransaction(signature, {
+        commitment: "confirmed",
+        maxSupportedTransactionVersion: 0,
+      });
+      const parser = new anchor.EventParser(program.programId, program.coder);
+      return Array.from(parser.parseLogs(tx!.meta!.logMessages!));
+    };
+    const only = async (signature: string, name: string) => {
+      const found = (await eventsOf(signature)).filter(
+        (e) => e.name.toLowerCase() === name.toLowerCase()
+      );
+      assert.equal(found.length, 1, `expected one ${name} event`);
+      return found[0].data as any;
+    };
+    // 2% discount for an approval within the early window, 20% bonds.
+    const offer = (earlyWindowSecs: number, extra: { bondBps?: number } = {}) => ({
+      bondBps: BOND_BPS,
+      earlyDiscountBps: DISCOUNT_BPS,
+      earlyWindowSecs,
+      ...extra,
+    });
+    const waitPast = async (escrow: PublicKey, secs: number) => {
+      const a = await program.account.escrow.fetch(escrow);
+      await waitUntilAfter((a.deliveredAt as BN).toNumber() + secs);
+    };
+    // Balances around a payout: what each side received, and what the vault held.
+    const measure = async (escrow: PublicKey, action: () => Promise<unknown>) => {
+      const vaultBefore = await bal(vaultOf(escrow));
+      const clientBefore = await bal(clientToken);
+      const freelancerBefore = await bal(freelancerToken);
+      await action();
+      const toClient = (await bal(clientToken)) - clientBefore;
+      const toFreelancer = (await bal(freelancerToken)) - freelancerBefore;
+      assert.equal(await balance(vaultOf(escrow)), "0");
+      // Nothing lost, nothing created.
+      assert.equal(toClient + toFreelancer, vaultBefore);
+      return { vaultBefore, toClient, toFreelancer };
+    };
+
+    it("an open delivery approved in the window pays the discount to the client, from the amount only", async () => {
+      const { escrow } = await open(LONG, 3600, 3600, AMOUNT, offer(3600));
+      await markDelivered(escrow);
+      let sig = "";
+      const r = await measure(escrow, async () => {
+        sig = await release(escrow);
+      });
+      assert.equal(r.vaultBefore, AMOUNT.toNumber() + BOND);
+      assert.equal(r.toClient, DISCOUNT);
+      // 2% of the amount, not of the amount plus the bond.
+      assert.notEqual(r.toClient, Math.floor((r.vaultBefore * DISCOUNT_BPS) / 10000));
+      assert.equal(r.toFreelancer, AMOUNT.toNumber() + BOND - DISCOUNT);
+      const released = await only(sig, "Released");
+      assert.equal(released.discount.toNumber(), DISCOUNT);
+      assert.equal(released.amount.toNumber(), AMOUNT.toNumber() + BOND - DISCOUNT);
+      assert.isFalse(released.conceded);
+      assert.deepEqual(await stateOf(escrow), { released: {} });
+    });
+
+    it("a sealed delivery approved in the window pays the discount when the key is claimed", async () => {
+      const key = randomBytes(32);
+      const { escrow } = await open(LONG, 3600, 3600, AMOUNT, offer(3600));
+      await markDelivered(escrow, freelancer, sha256(key));
+
+      const clientBefore = await bal(clientToken);
+      const approvedSig = await release(escrow);
+      assert.isTrue((await only(approvedSig, "Approved")).early);
+      // Approval moves no money.
+      assert.equal(await bal(clientToken), clientBefore);
+      assert.equal(await bal(vaultOf(escrow)), AMOUNT.toNumber() + BOND);
+
+      let claimSig = "";
+      const r = await measure(escrow, async () => {
+        claimSig = await claimWithKey(escrow, key);
+      });
+      assert.equal(r.toClient, DISCOUNT);
+      assert.equal(r.toFreelancer, AMOUNT.toNumber() + BOND - DISCOUNT);
+      assert.equal((await only(claimSig, "KeyRevealed")).discount.toNumber(), DISCOUNT);
+      assert.equal((await only(claimSig, "Released")).discount.toNumber(), DISCOUNT);
+    });
+
+    it("a late key reveal does not cost the client the discount it earned by approving early", async () => {
+      const key = randomBytes(32);
+      const { escrow } = await open(LONG, 3600, 3600, AMOUNT, offer(4));
+      await markDelivered(escrow, freelancer, sha256(key));
+      await release(escrow); // within 4 s of the delivery
+      await waitPast(escrow, 6); // the early window is over before the key arrives
+      const r = await measure(escrow, () => claimWithKey(escrow, key));
+      assert.equal(r.toClient, DISCOUNT);
+    });
+
+    it("approving after the early window earns no discount (open and sealed)", async () => {
+      const open1 = await open(LONG, 3600, 3600, AMOUNT, offer(3));
+      await markDelivered(open1.escrow);
+      await waitPast(open1.escrow, 3);
+      const r1 = await measure(open1.escrow, () => release(open1.escrow));
+      assert.equal(r1.toClient, 0);
+      assert.equal(r1.toFreelancer, AMOUNT.toNumber() + BOND);
+
+      const key = randomBytes(32);
+      const sealed1 = await open(LONG, 3600, 3600, AMOUNT, offer(3));
+      await markDelivered(sealed1.escrow, freelancer, sha256(key));
+      await waitPast(sealed1.escrow, 3);
+      const approvedSig = await release(sealed1.escrow);
+      assert.isFalse((await only(approvedSig, "Approved")).early);
+      const r2 = await measure(sealed1.escrow, () => claimWithKey(sealed1.escrow, key));
+      assert.equal(r2.toClient, 0);
+      assert.equal(r2.toFreelancer, AMOUNT.toNumber() + BOND);
+    });
+
+    it("conceding a dispute never earns the discount, even inside the window", async () => {
+      // Open delivery: reject, then concede while the early window would still be open.
+      const frozen = await freeze(3600, AMOUNT, offer(3600));
+      const r1 = await measure(frozen, () => release(frozen));
+      assert.equal(r1.toClient, 0);
+      assert.equal(r1.toFreelancer, AMOUNT.toNumber() + 2 * BOND);
+
+      // Sealed delivery: the concession only approves, and the key then pays the whole vault.
+      const key = randomBytes(32);
+      const sealedFrozen = await freeze(3600, AMOUNT, { ...offer(3600), keyHash: sha256(key) });
+      const approvedSig = await release(sealedFrozen);
+      const approved = await only(approvedSig, "Approved");
+      assert.isTrue(approved.conceded);
+      assert.isFalse(approved.early);
+      const r2 = await measure(sealedFrozen, () => claimWithKey(sealedFrozen, key));
+      assert.equal(r2.toClient, 0);
+      assert.equal(r2.toFreelancer, AMOUNT.toNumber() + 2 * BOND);
+    });
+
+    it("silence, a release before any delivery, a cancel and a settlement earn no discount", async () => {
+      // claim_if_silent (open delivery, review window 3 s so the wait is short)
+      const silent = await open(LONG, 3, 3600, AMOUNT, offer(3));
+      await markDelivered(silent.escrow);
+      await waitPast(silent.escrow, 3);
+      const r1 = await measure(silent.escrow, () => claimIfSilent(silent.escrow));
+      assert.equal(r1.toClient, 0);
+
+      // claim_with_key after a silent client (sealed): nothing was approved
+      const key = randomBytes(32);
+      const sealedSilent = await open(LONG, 3, 3600, AMOUNT, offer(3));
+      await markDelivered(sealedSilent.escrow, freelancer, sha256(key));
+      await waitPast(sealedSilent.escrow, 3);
+      const r2 = await measure(sealedSilent.escrow, () => claimWithKey(sealedSilent.escrow, key));
+      assert.equal(r2.toClient, 0);
+
+      // release before any delivery, with a discount on offer
+      const early = await open(LONG, 3600, 3600, AMOUNT, offer(3600));
+      const r3 = await measure(early.escrow, () => release(early.escrow));
+      assert.equal(r3.toClient, 0);
+      assert.equal(r3.toFreelancer, AMOUNT.toNumber() + BOND);
+
+      // cancel from Delivered: each side gets exactly its own deposit back
+      const cancelled = await open(LONG, 3600, 3600, AMOUNT, offer(3600));
+      await markDelivered(cancelled.escrow);
+      const r4 = await measure(cancelled.escrow, () => cancel(cancelled.escrow));
+      assert.equal(r4.toClient, AMOUNT.toNumber());
+      assert.equal(r4.toFreelancer, BOND);
+
+      // settlement: the invariants of settle() hold (burn + payouts = vault), no extra payout
+      const frozen = await freeze(3600, AMOUNT, offer(3600));
+      await propose(frozen, 5000, client);
+      const settled = await settle(frozen, 5000, freelancer);
+      assert.equal(Number(settled.vaultBefore), AMOUNT.toNumber() + 2 * BOND);
+    });
+
+    it("rounds the discount down, so the remainder stays with the freelancer", async () => {
+      // 1001 * 333 / 10000 = 33.33...
+      const { escrow } = await open(LONG, 3600, 3600, new BN(1001), {
+        earlyDiscountBps: 333,
+        earlyWindowSecs: 3600,
+      });
+      await markDelivered(escrow);
+      const r = await measure(escrow, () => release(escrow));
+      assert.equal(r.toClient, 33);
+      assert.equal(r.toFreelancer, 1001 - 33);
+    });
+
+    it("create validates the discount", async () => {
+      const deadlineTs = (await chainNow()) + LONG;
+      const attempt = (bps: number, window: number, review = 3600) =>
+        create(new BN(nextId++), AMOUNT, deadlineTs, review, 3600, 0, bps, window);
+      await expectError(attempt(1001, 60), "InvalidDiscount"); // above 10%
+      await expectError(attempt(200, 3601), "InvalidDiscount"); // window longer than the review window
+      await expectError(attempt(200, 0), "InvalidDiscount"); // a discount nobody can earn
+      // The limits themselves are allowed, and so is a window without a discount.
+      const id = new BN(nextId++);
+      await create(id, AMOUNT, deadlineTs, 3600, 3600, 0, 1000, 3600);
+      const account = await program.account.escrow.fetch(escrowPda(id));
+      assert.equal(account.earlyDiscountBps, 1000);
+      assert.equal(account.earlyWindowSecs.toNumber(), 3600);
+      await attempt(0, 60);
+    });
+
+    it("accept_job refuses a discount that changed since the freelancer looked", async () => {
+      const id = new BN(nextId++);
+      const escrow = escrowPda(id);
+      const deadlineTs = (await chainNow()) + LONG;
+      await create(id, AMOUNT, deadlineTs, 3600, 3600, 0, DISCOUNT_BPS, 3600);
+      const seen = await termsOf(escrow);
+      await withdraw(escrow);
+      await closeEscrow(escrow);
+      await create(id, AMOUNT, deadlineTs, 3600, 3600, 0, 0, 0);
+
+      await expectError(acceptJob(escrow, freelancer, freelancerToken, seen), "TermsMismatch");
+      assert.deepEqual(await stateOf(escrow), { funded: {} });
     });
   });
 

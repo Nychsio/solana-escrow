@@ -27,6 +27,14 @@ pub struct Release<'info> {
         token::token_program = token_program,
     )]
     pub freelancer_token: InterfaceAccount<'info, TokenAccount>,
+    /// Receives the early-payment discount (unused when no discount is owed).
+    #[account(
+        mut,
+        token::mint = mint,
+        token::authority = escrow.client,
+        token::token_program = token_program,
+    )]
+    pub client_token: InterfaceAccount<'info, TokenAccount>,
     pub token_program: Interface<'info, TokenInterface>,
 }
 
@@ -100,6 +108,14 @@ pub struct ClaimWithKey<'info> {
         token::token_program = token_program,
     )]
     pub freelancer_token: InterfaceAccount<'info, TokenAccount>,
+    /// Receives the early-payment discount (unused when no discount is owed).
+    #[account(
+        mut,
+        token::mint = mint,
+        token::authority = escrow.client,
+        token::token_program = token_program,
+    )]
+    pub client_token: InterfaceAccount<'info, TokenAccount>,
     pub token_program: Interface<'info, TokenInterface>,
 }
 
@@ -189,7 +205,8 @@ pub struct Withdraw<'info> {
     pub token_program: Interface<'info, TokenInterface>,
 }
 
-/// Client accepts the work (or pays early) and the vault goes to the freelancer. From
+/// Client accepts the work (or pays early) and the vault goes to the freelancer, minus the
+/// early-payment discount if the delivery was approved within the early window. From
 /// `Frozen` it is the client conceding the dispute: the freelancer gets the whole vault,
 /// including the client's own bond, which is what makes backing down cost something.
 /// For a sealed delivery (Delivered or Frozen) nothing is paid here: the client only
@@ -204,36 +221,46 @@ pub fn release(ctx: Context<Release>) -> Result<()> {
         EscrowState::Frozen,
     ])?;
     let conceded = escrow.state == EscrowState::Frozen;
+    let now = Clock::get()?.unix_timestamp;
     escrow.settle_proposer = SETTLE_NONE;
     escrow.settle_bps = 0;
 
     if escrow.is_sealed() {
-        let now = Clock::get()?.unix_timestamp;
         escrow.approved_at = now;
+        let early = !conceded && escrow.is_early(now);
         escrow.state = EscrowState::Approved;
         emit!(Approved {
             escrow: ctx.accounts.escrow.key(),
             approved_at: now,
             conceded,
+            early,
         });
         return Ok(());
     }
+    // Only a quick approval of a delivery earns the discount: not an early release before
+    // any delivery, and not a concession from Frozen (is_early rules that out too).
+    let discount = if escrow.state == EscrowState::Delivered {
+        escrow.early_discount(now)
+    } else {
+        0
+    };
     escrow.state = EscrowState::Released;
 
-    let amount = ctx.accounts.vault.amount;
-    pay_from_vault(
+    let paid = pay_with_discount(
         &ctx.accounts.escrow,
         &ctx.accounts.vault,
         &ctx.accounts.mint,
         &ctx.accounts.freelancer_token,
+        &ctx.accounts.client_token,
         &ctx.accounts.token_program,
-        ctx.accounts.vault.amount,
+        discount,
     )?;
     emit!(Released {
         escrow: ctx.accounts.escrow.key(),
         to: ctx.accounts.escrow.freelancer,
-        amount,
+        amount: paid.to_freelancer,
         conceded,
+        discount: paid.to_client,
     });
     Ok(())
 }
@@ -262,6 +289,7 @@ pub fn claim_if_silent(ctx: Context<ClaimIfSilent>) -> Result<()> {
         to: ctx.accounts.escrow.freelancer,
         amount,
         conceded: false,
+        discount: 0,
     });
     Ok(())
 }
@@ -383,27 +411,38 @@ pub fn claim_with_key(ctx: Context<ClaimWithKey>, key: [u8; 32]) -> Result<()> {
         solana_sha256_hasher::hash(&key).to_bytes() == escrow.key_hash,
         ErrorCode::InvalidKey
     );
+    // The discount follows the client's approval, not the reveal: it is judged on
+    // approved_at against delivered_at, so a late reveal does not cost the client it. A
+    // client who stayed silent (Delivered) approved nothing, and one who conceded a
+    // dispute is excluded by is_early (frozen_at != 0).
+    let discount = if escrow.state == EscrowState::Approved {
+        escrow.early_discount(escrow.approved_at)
+    } else {
+        0
+    };
     escrow.revealed_key = key;
     escrow.state = EscrowState::Released;
 
-    let amount = ctx.accounts.vault.amount;
-    pay_from_vault(
+    let paid = pay_with_discount(
         &ctx.accounts.escrow,
         &ctx.accounts.vault,
         &ctx.accounts.mint,
         &ctx.accounts.freelancer_token,
+        &ctx.accounts.client_token,
         &ctx.accounts.token_program,
-        amount,
+        discount,
     )?;
     emit!(Released {
         escrow: ctx.accounts.escrow.key(),
         to: ctx.accounts.escrow.freelancer,
-        amount,
+        amount: paid.to_freelancer,
         conceded: false,
+        discount: paid.to_client,
     });
     emit!(KeyRevealed {
         escrow: ctx.accounts.escrow.key(),
         key,
+        discount: paid.to_client,
     });
     Ok(())
 }
@@ -441,6 +480,37 @@ pub fn refund_unrevealed(ctx: Context<RefundUnrevealed>) -> Result<()> {
         amount,
     });
     Ok(())
+}
+
+struct DiscountedPayout {
+    to_freelancer: u64,
+    to_client: u64,
+}
+
+/// Pays the whole vault out: `discount` to the client, the rest to the freelancer, so nothing
+/// is left behind. The discount is capped at the vault balance as a safety net (it is a
+/// share of `amount`, which the vault always holds). Zero transfers are skipped.
+fn pay_with_discount<'info>(
+    escrow: &Account<'info, Escrow>,
+    vault: &InterfaceAccount<'info, TokenAccount>,
+    mint: &InterfaceAccount<'info, Mint>,
+    freelancer_token: &InterfaceAccount<'info, TokenAccount>,
+    client_token: &InterfaceAccount<'info, TokenAccount>,
+    token_program: &Interface<'info, TokenInterface>,
+    discount: u64,
+) -> Result<DiscountedPayout> {
+    let total = vault.amount;
+    let to_client = discount.min(total);
+    let to_freelancer = total - to_client;
+    for (destination, amount) in [(client_token, to_client), (freelancer_token, to_freelancer)] {
+        if amount > 0 {
+            pay_from_vault(escrow, vault, mint, destination, token_program, amount)?;
+        }
+    }
+    Ok(DiscountedPayout {
+        to_freelancer,
+        to_client,
+    })
 }
 
 /// The only place tokens are paid out of a vault. The escrow PDA signs via

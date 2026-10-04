@@ -52,4 +52,6 @@ pub enum ErrorCode {
     SealedDeliveryUseKey,
     #[msg("This delivery is not sealed")]
     NotSealed,
+    #[msg("Invalid early-payment discount (at most 1000 bps, with a window no longer than the review window)")]
+    InvalidDiscount,
 }

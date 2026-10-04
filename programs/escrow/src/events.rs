@@ -44,6 +44,8 @@ pub struct Approved {
     pub escrow: Pubkey,
     pub approved_at: i64,
     pub conceded: bool,
+    /// True when the approval falls inside the early-payment window (a discount will apply).
+    pub early: bool,
 }
 
 /// The key to a sealed delivery, published in the same transaction that pays for it.
@@ -51,6 +53,8 @@ pub struct Approved {
 pub struct KeyRevealed {
     pub escrow: Pubkey,
     pub key: [u8; 32],
+    /// Early-payment discount paid back to the client in this transaction (0 if none).
+    pub discount: u64,
 }
 
 /// Emitted by `release` and by `claim_if_silent`. `conceded` is true when the client
@@ -59,8 +63,11 @@ pub struct KeyRevealed {
 pub struct Released {
     pub escrow: Pubkey,
     pub to: Pubkey,
+    /// What the freelancer received (the vault minus the discount).
     pub amount: u64,
     pub conceded: bool,
+    /// Early-payment discount paid to the client in the same transaction (0 if none).
+    pub discount: u64,
 }
 
 /// Emitted by `refund_if_late`.

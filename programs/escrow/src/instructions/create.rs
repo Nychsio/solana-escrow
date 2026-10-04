@@ -84,6 +84,8 @@ pub fn create(
     review_window_secs: u64,
     dispute_window_secs: u64,
     bond_bps: u16,
+    early_discount_bps: u16,
+    early_window_secs: u64,
 ) -> Result<()> {
     check_mint_supported(&ctx.accounts.mint.to_account_info())?;
     require!(amount > 0, ErrorCode::InvalidAmount);
@@ -94,6 +96,14 @@ pub fn create(
     require!(review_window_secs > 0, ErrorCode::InvalidReviewWindow);
     require!(dispute_window_secs > 0, ErrorCode::InvalidDisputeWindow);
     require!(bond_bps <= MAX_BPS, ErrorCode::InvalidBps);
+    // The discount is the freelancer's own offer, capped at 10%, and it must be earnable:
+    // a real window that fits inside the review window.
+    require!(
+        early_discount_bps <= MAX_DISCOUNT_BPS
+            && early_window_secs <= review_window_secs
+            && (early_discount_bps == 0 || early_window_secs > 0),
+        ErrorCode::InvalidDiscount
+    );
     let bond_amount = u64::try_from(u128::from(amount) * u128::from(bond_bps) / u128::from(MAX_BPS))
         .map_err(|_| ErrorCode::InvalidBps)?;
     let now = Clock::get()?.unix_timestamp;
@@ -128,7 +138,9 @@ pub fn create(
         key_hash: [0; 32],
         revealed_key: [0; 32],
         approved_at: 0,
-        _reserved: [0; 37],
+        early_discount_bps,
+        early_window_secs,
+        _reserved: [0; 27],
     });
 
     let cpi_accounts = TransferChecked {

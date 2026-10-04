@@ -67,6 +67,8 @@ pub fn accept_job(
     expected_deadline_ts: i64,
     expected_review_window_secs: u64,
     expected_dispute_window_secs: u64,
+    expected_early_discount_bps: u16,
+    expected_early_window_secs: u64,
 ) -> Result<()> {
     let escrow = &mut ctx.accounts.escrow;
     escrow.require_state(&[EscrowState::Funded])?;
@@ -75,7 +77,9 @@ pub fn accept_job(
             && escrow.bond_amount == expected_bond_amount
             && escrow.deadline_ts == expected_deadline_ts
             && escrow.review_window_secs == expected_review_window_secs
-            && escrow.dispute_window_secs == expected_dispute_window_secs,
+            && escrow.dispute_window_secs == expected_dispute_window_secs
+            && escrow.early_discount_bps == expected_early_discount_bps
+            && escrow.early_window_secs == expected_early_window_secs,
         ErrorCode::TermsMismatch
     );
     let now = Clock::get()?.unix_timestamp;
