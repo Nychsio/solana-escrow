@@ -3,7 +3,7 @@ use anchor_spl::token_interface::{
     self, Burn, CloseAccount, Mint, TokenAccount, TokenInterface,
 };
 
-use crate::{errors::ErrorCode, state::*};
+use crate::{errors::ErrorCode, events::*, state::*};
 
 #[derive(Accounts)]
 pub struct CloseEscrow<'info> {
@@ -64,5 +64,10 @@ pub fn close_escrow(ctx: Context<CloseEscrow>) -> Result<()> {
         let cpi_ctx =
             CpiContext::new_with_signer(ctx.accounts.token_program.key(), cpi_accounts, seeds);
         token_interface::close_account(cpi_ctx)
-    })
+    })?;
+    emit!(Closed {
+        escrow: ctx.accounts.escrow.key(),
+        dust_burned: dust,
+    });
+    Ok(())
 }

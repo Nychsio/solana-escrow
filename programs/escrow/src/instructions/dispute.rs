@@ -2,7 +2,7 @@ use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{self, Burn, Mint, TokenAccount, TokenInterface};
 
 use super::payout::pay_from_vault;
-use crate::{errors::ErrorCode, state::*};
+use crate::{errors::ErrorCode, events::*, state::*};
 
 #[derive(Accounts)]
 pub struct ProposeSettlement<'info> {
@@ -72,6 +72,11 @@ pub fn propose_settlement(ctx: Context<ProposeSettlement>, freelancer_bps: u16) 
 
     escrow.settle_proposer = role;
     escrow.settle_bps = freelancer_bps;
+    emit!(SettlementProposed {
+        escrow: ctx.accounts.escrow.key(),
+        proposer: role,
+        freelancer_bps,
+    });
     Ok(())
 }
 
@@ -134,6 +139,12 @@ pub fn accept_settlement(ctx: Context<AcceptSettlement>, freelancer_bps: u16) ->
             )?;
         }
     }
+    emit!(Settled {
+        escrow: ctx.accounts.escrow.key(),
+        burned: burn_amount,
+        to_freelancer: freelancer_amount,
+        to_client: client_amount,
+    });
     Ok(())
 }
 
@@ -144,6 +155,7 @@ pub fn burn_if_unsettled(ctx: Context<BurnIfUnsettled>) -> Result<()> {
     let now = Clock::get()?.unix_timestamp;
     require!(now > escrow.dispute_ends_at(), ErrorCode::DisputeWindowOpen);
     escrow.state = EscrowState::Burned;
+    let burned_amount = ctx.accounts.vault.amount;
 
     let cpi_accounts = Burn {
         mint: ctx.accounts.mint.to_account_info(),
@@ -153,6 +165,11 @@ pub fn burn_if_unsettled(ctx: Context<BurnIfUnsettled>) -> Result<()> {
     ctx.accounts.escrow.with_signer_seeds(|seeds| {
         let cpi_ctx =
             CpiContext::new_with_signer(ctx.accounts.token_program.key(), cpi_accounts, seeds);
-        token_interface::burn(cpi_ctx, ctx.accounts.vault.amount)
-    })
+        token_interface::burn(cpi_ctx, burned_amount)
+    })?;
+    emit!(Burned {
+        escrow: ctx.accounts.escrow.key(),
+        amount: burned_amount,
+    });
+    Ok(())
 }

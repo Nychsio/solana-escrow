@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{self, Mint, TokenAccount, TokenInterface, TransferChecked};
 
-use crate::{errors::ErrorCode, state::*};
+use crate::{errors::ErrorCode, events::*, state::*};
 
 #[derive(Accounts)]
 pub struct AcceptJob<'info> {
@@ -82,6 +82,11 @@ pub fn accept_job(ctx: Context<AcceptJob>) -> Result<()> {
         let cpi_ctx = CpiContext::new(ctx.accounts.token_program.key(), cpi_accounts);
         token_interface::transfer_checked(cpi_ctx, bond, ctx.accounts.mint.decimals)?;
     }
+    emit!(JobAccepted {
+        escrow: ctx.accounts.escrow.key(),
+        freelancer: ctx.accounts.freelancer.key(),
+        bond_amount: bond,
+    });
     Ok(())
 }
 
@@ -95,6 +100,11 @@ pub fn mark_delivered(ctx: Context<MarkDelivered>, deliverable_hash: [u8; 32]) -
     escrow.delivered_at = Some(now);
     escrow.deliverable_hash = deliverable_hash;
     escrow.state = EscrowState::Delivered;
+    emit!(Delivered {
+        escrow: ctx.accounts.escrow.key(),
+        delivered_at: now,
+        deliverable_hash,
+    });
     Ok(())
 }
 
@@ -121,6 +131,11 @@ pub fn reject(ctx: Context<Reject>) -> Result<()> {
         let cpi_ctx = CpiContext::new(ctx.accounts.token_program.key(), cpi_accounts);
         token_interface::transfer_checked(cpi_ctx, bond, ctx.accounts.mint.decimals)?;
     }
+    emit!(Rejected {
+        escrow: ctx.accounts.escrow.key(),
+        client_bond: bond,
+        frozen_at: now,
+    });
     Ok(())
 }
 
@@ -142,5 +157,10 @@ pub fn request_revision(ctx: Context<RequestRevision>) -> Result<()> {
     escrow.delivered_at = None;
     escrow.deadline_ts = escrow.deadline_ts.max(now.saturating_add(window));
     escrow.state = EscrowState::Accepted;
+    emit!(RevisionRequested {
+        escrow: ctx.accounts.escrow.key(),
+        revisions_used: ctx.accounts.escrow.revisions_used,
+        new_deadline_ts: ctx.accounts.escrow.deadline_ts,
+    });
     Ok(())
 }

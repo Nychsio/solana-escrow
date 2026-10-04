@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{self, Mint, TokenAccount, TokenInterface, TransferChecked};
 
-use crate::{errors::ErrorCode, state::*};
+use crate::{errors::ErrorCode, events::*, state::*};
 
 #[derive(Accounts)]
 pub struct Release<'info> {
@@ -150,6 +150,7 @@ pub fn release(ctx: Context<Release>) -> Result<()> {
     ])?;
     escrow.state = EscrowState::Released;
 
+    let amount = ctx.accounts.vault.amount;
     pay_from_vault(
         &ctx.accounts.escrow,
         &ctx.accounts.vault,
@@ -157,7 +158,13 @@ pub fn release(ctx: Context<Release>) -> Result<()> {
         &ctx.accounts.freelancer_token,
         &ctx.accounts.token_program,
         ctx.accounts.vault.amount,
-    )
+    )?;
+    emit!(Released {
+        escrow: ctx.accounts.escrow.key(),
+        to: ctx.accounts.escrow.freelancer,
+        amount,
+    });
+    Ok(())
 }
 
 /// Client stayed silent for the whole review window: freelancer pays themselves.
@@ -168,6 +175,7 @@ pub fn claim_if_silent(ctx: Context<ClaimIfSilent>) -> Result<()> {
     require!(now > escrow.review_ends_at()?, ErrorCode::ReviewWindowOpen);
     escrow.state = EscrowState::Released;
 
+    let amount = ctx.accounts.vault.amount;
     pay_from_vault(
         &ctx.accounts.escrow,
         &ctx.accounts.vault,
@@ -175,7 +183,13 @@ pub fn claim_if_silent(ctx: Context<ClaimIfSilent>) -> Result<()> {
         &ctx.accounts.freelancer_token,
         &ctx.accounts.token_program,
         ctx.accounts.vault.amount,
-    )
+    )?;
+    emit!(Released {
+        escrow: ctx.accounts.escrow.key(),
+        to: ctx.accounts.escrow.freelancer,
+        amount,
+    });
+    Ok(())
 }
 
 /// Nothing was delivered before the deadline: client takes the funds back.
@@ -186,6 +200,7 @@ pub fn refund_if_late(ctx: Context<RefundIfLate>) -> Result<()> {
     require!(now > escrow.deadline_ts, ErrorCode::DeadlineNotReached);
     escrow.state = EscrowState::Refunded;
 
+    let amount = ctx.accounts.vault.amount;
     pay_from_vault(
         &ctx.accounts.escrow,
         &ctx.accounts.vault,
@@ -193,7 +208,13 @@ pub fn refund_if_late(ctx: Context<RefundIfLate>) -> Result<()> {
         &ctx.accounts.client_token,
         &ctx.accounts.token_program,
         ctx.accounts.vault.amount,
-    )
+    )?;
+    emit!(Refunded {
+        escrow: ctx.accounts.escrow.key(),
+        to: ctx.accounts.escrow.client,
+        amount,
+    });
+    Ok(())
 }
 
 /// Client takes the funds back while the job is still unaccepted. No time rule:
@@ -203,6 +224,7 @@ pub fn withdraw(ctx: Context<Withdraw>) -> Result<()> {
     escrow.require_state(&[EscrowState::Funded])?;
     escrow.state = EscrowState::Refunded;
 
+    let amount = ctx.accounts.vault.amount;
     pay_from_vault(
         &ctx.accounts.escrow,
         &ctx.accounts.vault,
@@ -210,7 +232,12 @@ pub fn withdraw(ctx: Context<Withdraw>) -> Result<()> {
         &ctx.accounts.client_token,
         &ctx.accounts.token_program,
         ctx.accounts.vault.amount,
-    )
+    )?;
+    emit!(Withdrawn {
+        escrow: ctx.accounts.escrow.key(),
+        amount,
+    });
+    Ok(())
 }
 
 /// Freelancer unwinds the deal, no burn: they get their own bond back (if they paid
@@ -250,6 +277,11 @@ pub fn cancel_by_freelancer(ctx: Context<CancelByFreelancer>) -> Result<()> {
             )?;
         }
     }
+    emit!(Cancelled {
+        escrow: ctx.accounts.escrow.key(),
+        to_client: vault_amount - freelancer_amount,
+        to_freelancer: freelancer_amount,
+    });
     Ok(())
 }
 

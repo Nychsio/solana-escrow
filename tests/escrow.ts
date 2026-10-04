@@ -1467,6 +1467,90 @@ describe("escrow", () => {
     });
   });
 
+  describe("events", () => {
+    // Events are read back from the transaction logs, like an indexer would.
+    const eventsOf = async (signature: string) => {
+      const tx = await connection.getTransaction(signature, {
+        commitment: "confirmed",
+        maxSupportedTransactionVersion: 0,
+      });
+      const parser = new anchor.EventParser(program.programId, program.coder);
+      return Array.from(parser.parseLogs(tx!.meta!.logMessages!));
+    };
+    const only = async (signature: string, name: string) => {
+      // The parser reports names in camelCase ("escrowCreated").
+      const found = (await eventsOf(signature)).filter(
+        (e) => e.name.toLowerCase() === name.toLowerCase()
+      );
+      assert.equal(found.length, 1, `expected one ${name} event`);
+      return found[0].data as any;
+    };
+
+    it("emits an event for every step of a full job", async () => {
+      const id = new BN(nextId++);
+      const escrow = escrowPda(id);
+      const deadlineTs = (await chainNow()) + LONG;
+      const bondBps = 2000;
+      const bond = (AMOUNT.toNumber() * bondBps) / 10000;
+
+      const created = await only(
+        await create(id, AMOUNT, deadlineTs, 3600, 3600, bondBps),
+        "EscrowCreated"
+      );
+      assert.isTrue(created.escrow.equals(escrow));
+      assert.isTrue(created.client.equals(client.publicKey));
+      assert.isTrue(created.freelancer.equals(freelancer.publicKey));
+      assert.equal(created.amount.toString(), AMOUNT.toString());
+      assert.equal(created.bondAmount.toNumber(), bond);
+      assert.equal(created.deadlineTs.toNumber(), deadlineTs);
+
+      const accepted = await only(await acceptJob(escrow), "JobAccepted");
+      assert.equal(accepted.bondAmount.toNumber(), bond);
+
+      const delivered = await only(await markDelivered(escrow), "Delivered");
+      assert.deepEqual(Array.from(delivered.deliverableHash), HASH);
+
+      const released = await only(await release(escrow), "Released");
+      assert.isTrue(released.to.equals(freelancer.publicKey));
+      assert.equal(released.amount.toNumber(), AMOUNT.toNumber() + bond);
+
+      const closed = await only(await closeEscrow(escrow), "Closed");
+      assert.equal(closed.dustBurned.toNumber(), 0);
+    });
+
+    it("emits the dispute events", async () => {
+      const escrow = await freeze(3600, AMOUNT, { bondBps: 1000 });
+      const proposed = await only(await propose(escrow, 7000, client), "SettlementProposed");
+      assert.equal(proposed.proposer, 1);
+      assert.equal(proposed.freelancerBps, 7000);
+
+      const settled = await only(await accept(escrow, 7000, freelancer), "Settled");
+      const total =
+        settled.burned.toNumber() +
+        settled.toFreelancer.toNumber() +
+        settled.toClient.toNumber();
+      assert.equal(total, AMOUNT.toNumber() + 2 * ((AMOUNT.toNumber() * 1000) / 10000));
+    });
+
+    it("emits Rejected, Cancelled and Burned", async () => {
+      const bondBps = 1000;
+      const bond = (AMOUNT.toNumber() * bondBps) / 10000;
+      const { escrow } = await open(LONG, 3600, 3600, AMOUNT, { bondBps });
+      await markDelivered(escrow);
+      const rejected = await only(await reject(escrow), "Rejected");
+      assert.equal(rejected.clientBond.toNumber(), bond);
+
+      const cancelled = await only(await cancel(escrow), "Cancelled");
+      assert.equal(cancelled.toFreelancer.toNumber(), bond);
+      assert.equal(cancelled.toClient.toNumber(), AMOUNT.toNumber() + bond);
+
+      const frozen = await freeze(4);
+      await waitForDisputeEnd(frozen);
+      const burned = await only(await burn(frozen), "Burned");
+      assert.equal(burned.amount.toString(), AMOUNT.toString());
+    });
+  });
+
   describe("wrong signer", () => {
     it("rejects every instruction called by the wrong party", async () => {
       const { escrow } = await open(LONG, 3600);

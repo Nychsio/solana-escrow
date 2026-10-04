@@ -8,7 +8,7 @@ use anchor_spl::{
     token_interface::{self, Mint, TokenAccount, TokenInterface, TransferChecked},
 };
 
-use crate::{errors::ErrorCode, state::*};
+use crate::{errors::ErrorCode, events::*, state::*};
 
 #[derive(Accounts)]
 #[instruction(id: u64)]
@@ -132,5 +132,15 @@ pub fn create(
     let cpi_ctx = CpiContext::new(ctx.accounts.token_program.key(), cpi_accounts);
     token_interface::transfer_checked(cpi_ctx, amount, ctx.accounts.mint.decimals)?;
 
+    emit!(EscrowCreated {
+        escrow: ctx.accounts.escrow.key(),
+        client: ctx.accounts.client.key(),
+        freelancer: ctx.accounts.freelancer.key(),
+        mint: ctx.accounts.mint.key(),
+        id,
+        amount,
+        bond_amount,
+        deadline_ts,
+    });
     Ok(())
 }
