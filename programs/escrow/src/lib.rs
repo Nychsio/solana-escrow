@@ -40,6 +40,10 @@ pub mod escrow {
         instructions::delivery::accept_job(ctx)
     }
 
+    pub fn request_revision(ctx: Context<RequestRevision>) -> Result<()> {
+        instructions::delivery::request_revision(ctx)
+    }
+
     pub fn withdraw(ctx: Context<Withdraw>) -> Result<()> {
         instructions::payout::withdraw(ctx)
     }

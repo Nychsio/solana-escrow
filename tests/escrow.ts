@@ -173,6 +173,13 @@ describe("escrow", () => {
       .signers([signer])
       .rpc();
 
+  const requestRevision = (escrow: PublicKey, signer = client) =>
+    program.methods
+      .requestRevision()
+      .accountsPartial({ client: signer.publicKey, escrow })
+      .signers([signer])
+      .rpc();
+
   const withdraw = (escrow: PublicKey, signer = client) =>
     program.methods
       .withdraw()
@@ -1388,6 +1395,75 @@ describe("escrow", () => {
         "ConstraintTokenOwner"
       );
       assert.equal(await balance(vaultOf(escrow)), AMOUNT.toString());
+    });
+  });
+
+  describe("revisions", () => {
+    it("sends the job back to Accepted with a later deadline, until the limit is used up", async () => {
+      const { escrow, deadlineTs } = await open(LONG, 3600, 3600, AMOUNT, {
+        maxRevisions: 1,
+        revisionWindowSecs: LONG * 2,
+      });
+      await markDelivered(escrow);
+
+      await requestRevision(escrow);
+      const account = await program.account.escrow.fetch(escrow);
+      assert.deepEqual(account.state, { accepted: {} });
+      assert.isNull(account.deliveredAt);
+      assert.equal(account.revisionsUsed, 1);
+      // The deadline only ever moves out.
+      assert.isAbove(account.deadlineTs.toNumber(), deadlineTs);
+      assert.isAtLeast(
+        account.deadlineTs.toNumber(),
+        (await chainNow()) + LONG * 2 - 60
+      );
+
+      // The freelancer delivers again; no revisions are left for a second request.
+      await markDelivered(escrow);
+      await expectError(requestRevision(escrow), "NoRevisionsLeft");
+      assert.deepEqual(await stateOf(escrow), { delivered: {} });
+
+      await expectPayout(escrow, freelancerToken, () => release(escrow));
+    });
+
+    it("is refused when the escrow allows no revisions", async () => {
+      const { escrow } = await open(LONG, 3600);
+      await markDelivered(escrow);
+      await expectError(requestRevision(escrow), "NoRevisionsLeft");
+    });
+
+    it("is refused after the review window", async () => {
+      const { escrow } = await open(LONG, 3, 3600, AMOUNT, {
+        maxRevisions: 2,
+        revisionWindowSecs: 60,
+      });
+      await markDelivered(escrow);
+      const account = await program.account.escrow.fetch(escrow);
+      await waitUntilAfter((account.deliveredAt as BN).toNumber() + 3);
+      await expectError(requestRevision(escrow), "ReviewWindowClosed");
+    });
+
+    it("is client-only and needs a delivery", async () => {
+      const { escrow } = await open(LONG, 3600, 3600, AMOUNT, {
+        maxRevisions: 1,
+        revisionWindowSecs: 60,
+      });
+      await expectError(requestRevision(escrow), "InvalidState");
+      await markDelivered(escrow);
+      await expectError(requestRevision(escrow, freelancer), "Unauthorized");
+      await expectError(requestRevision(escrow, stranger), "Unauthorized");
+    });
+
+    it("validates the revision settings in create", async () => {
+      const deadlineTs = (await chainNow()) + LONG;
+      await expectError(
+        create(new BN(nextId++), AMOUNT, deadlineTs, 3600, 3600, 0, 11, 60),
+        "InvalidRevisionConfig"
+      );
+      await expectError(
+        create(new BN(nextId++), AMOUNT, deadlineTs, 3600, 3600, 0, 1, 0),
+        "InvalidRevisionConfig"
+      );
     });
   });
 
