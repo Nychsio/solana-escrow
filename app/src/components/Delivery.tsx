@@ -69,7 +69,7 @@ export function Delivery({ pda, esc, now, role, reload }: EscrowView) {
   const state = stateOf(esc);
   const onChain = toHex(esc.deliverableHash);
   const hasHash = /[1-9a-f]/.test(onChain);
-  const canDeliver = role === "freelancer" && state === "funded" && now <= esc.deadlineTs.toNumber();
+  const canDeliver = role === "freelancer" && state === "accepted" && now <= esc.deadlineTs.toNumber();
 
   const deliver = async () => {
     if (!hash || !publicKey) return;

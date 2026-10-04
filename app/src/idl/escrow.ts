@@ -14,6 +14,124 @@ export type Escrow = {
   },
   "instructions": [
     {
+      "name": "acceptJob",
+      "discriminator": [
+        43,
+        201,
+        124,
+        1,
+        19,
+        189,
+        96,
+        10
+      ],
+      "accounts": [
+        {
+          "name": "freelancer",
+          "signer": true,
+          "relations": [
+            "escrow"
+          ]
+        },
+        {
+          "name": "escrow",
+          "writable": true
+        },
+        {
+          "name": "mint",
+          "relations": [
+            "escrow"
+          ]
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "escrow"
+              },
+              {
+                "kind": "account",
+                "path": "tokenProgram"
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "freelancerToken",
+          "writable": true
+        },
+        {
+          "name": "tokenProgram"
+        }
+      ],
+      "args": [
+        {
+          "name": "expectedAmount",
+          "type": "u64"
+        },
+        {
+          "name": "expectedBondAmount",
+          "type": "u64"
+        },
+        {
+          "name": "expectedDeadlineTs",
+          "type": "i64"
+        },
+        {
+          "name": "expectedReviewWindowSecs",
+          "type": "u64"
+        },
+        {
+          "name": "expectedDisputeWindowSecs",
+          "type": "u64"
+        }
+      ]
+    },
+    {
       "name": "acceptSettlement",
       "discriminator": [
         203,
@@ -303,6 +421,10 @@ export type Escrow = {
           "writable": true
         },
         {
+          "name": "freelancerToken",
+          "writable": true
+        },
+        {
           "name": "tokenProgram"
         }
       ],
@@ -322,11 +444,11 @@ export type Escrow = {
       ],
       "accounts": [
         {
-          "name": "freelancer",
-          "signer": true,
-          "relations": [
-            "escrow"
-          ]
+          "name": "caller",
+          "docs": [
+            "Anyone can trigger the payout; it can only go to the freelancer's account."
+          ],
+          "signer": true
         },
         {
           "name": "escrow",
@@ -435,6 +557,10 @@ export type Escrow = {
         },
         {
           "name": "mint",
+          "docs": [
+            "Mutable because leftover dust is burned."
+          ],
+          "writable": true,
           "relations": [
             "escrow"
           ]
@@ -649,6 +775,10 @@ export type Escrow = {
         {
           "name": "disputeWindowSecs",
           "type": "u64"
+        },
+        {
+          "name": "bondBps",
+          "type": "u16"
         }
       ]
     },
@@ -732,11 +862,11 @@ export type Escrow = {
       ],
       "accounts": [
         {
-          "name": "client",
-          "signer": true,
-          "relations": [
-            "escrow"
-          ]
+          "name": "caller",
+          "docs": [
+            "Anyone can trigger the refund; it can only go to the client's account."
+          ],
+          "signer": true
         },
         {
           "name": "escrow",
@@ -838,6 +968,76 @@ export type Escrow = {
         {
           "name": "escrow",
           "writable": true
+        },
+        {
+          "name": "mint",
+          "relations": [
+            "escrow"
+          ]
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "escrow"
+              },
+              {
+                "kind": "account",
+                "path": "tokenProgram"
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "clientToken",
+          "writable": true
+        },
+        {
+          "name": "tokenProgram"
         }
       ],
       "args": []
@@ -938,6 +1138,103 @@ export type Escrow = {
         }
       ],
       "args": []
+    },
+    {
+      "name": "withdraw",
+      "discriminator": [
+        183,
+        18,
+        70,
+        156,
+        148,
+        109,
+        161,
+        34
+      ],
+      "accounts": [
+        {
+          "name": "client",
+          "signer": true,
+          "relations": [
+            "escrow"
+          ]
+        },
+        {
+          "name": "escrow",
+          "writable": true
+        },
+        {
+          "name": "mint",
+          "relations": [
+            "escrow"
+          ]
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "escrow"
+              },
+              {
+                "kind": "account",
+                "path": "tokenProgram"
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "clientToken",
+          "writable": true
+        },
+        {
+          "name": "tokenProgram"
+        }
+      ],
+      "args": []
     }
   ],
   "accounts": [
@@ -952,6 +1249,164 @@ export type Escrow = {
         22,
         218,
         155
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "burned",
+      "discriminator": [
+        207,
+        37,
+        251,
+        154,
+        239,
+        229,
+        14,
+        67
+      ]
+    },
+    {
+      "name": "cancelled",
+      "discriminator": [
+        136,
+        23,
+        42,
+        65,
+        143,
+        233,
+        234,
+        46
+      ]
+    },
+    {
+      "name": "closed",
+      "discriminator": [
+        50,
+        31,
+        87,
+        155,
+        135,
+        220,
+        195,
+        239
+      ]
+    },
+    {
+      "name": "delivered",
+      "discriminator": [
+        148,
+        178,
+        60,
+        250,
+        87,
+        49,
+        149,
+        65
+      ]
+    },
+    {
+      "name": "escrowCreated",
+      "discriminator": [
+        70,
+        127,
+        105,
+        102,
+        92,
+        97,
+        7,
+        173
+      ]
+    },
+    {
+      "name": "jobAccepted",
+      "discriminator": [
+        47,
+        54,
+        152,
+        59,
+        118,
+        195,
+        251,
+        114
+      ]
+    },
+    {
+      "name": "refunded",
+      "discriminator": [
+        35,
+        103,
+        149,
+        246,
+        196,
+        123,
+        221,
+        99
+      ]
+    },
+    {
+      "name": "rejected",
+      "discriminator": [
+        119,
+        30,
+        67,
+        78,
+        53,
+        53,
+        23,
+        31
+      ]
+    },
+    {
+      "name": "released",
+      "discriminator": [
+        232,
+        229,
+        255,
+        136,
+        101,
+        189,
+        15,
+        220
+      ]
+    },
+    {
+      "name": "settled",
+      "discriminator": [
+        232,
+        210,
+        40,
+        17,
+        142,
+        124,
+        145,
+        238
+      ]
+    },
+    {
+      "name": "settlementProposed",
+      "discriminator": [
+        139,
+        32,
+        64,
+        205,
+        27,
+        154,
+        100,
+        147
+      ]
+    },
+    {
+      "name": "withdrawn",
+      "discriminator": [
+        20,
+        89,
+        223,
+        198,
+        194,
+        124,
+        219,
+        13
       ]
     }
   ],
@@ -1040,9 +1495,111 @@ export type Escrow = {
       "code": 6016,
       "name": "vaultNotEmpty",
       "msg": "Vault still holds tokens"
+    },
+    {
+      "code": 6017,
+      "name": "unsupportedMint",
+      "msg": "This mint is not supported (Token-2022 extension outside the allow-list)"
+    },
+    {
+      "code": 6018,
+      "name": "termsMismatch",
+      "msg": "The escrow terms differ from what the freelancer agreed to"
+    },
+    {
+      "code": 6019,
+      "name": "sameParty",
+      "msg": "Client and freelancer must be different wallets"
+    },
+    {
+      "code": 6020,
+      "name": "windowTooLong",
+      "msg": "A deadline or window is longer than the 90 day maximum"
+    },
+    {
+      "code": 6021,
+      "name": "invalidReviewWindow",
+      "msg": "Review window must be greater than zero"
     }
   ],
   "types": [
+    {
+      "name": "burned",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "escrow",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "cancelled",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "escrow",
+            "type": "pubkey"
+          },
+          {
+            "name": "toClient",
+            "type": "u64"
+          },
+          {
+            "name": "toFreelancer",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "closed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "escrow",
+            "type": "pubkey"
+          },
+          {
+            "name": "dustBurned",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "delivered",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "escrow",
+            "type": "pubkey"
+          },
+          {
+            "name": "deliveredAt",
+            "type": "i64"
+          },
+          {
+            "name": "deliverableHash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          }
+        ]
+      }
+    },
     {
       "name": "escrow",
       "type": {
@@ -1132,16 +1689,66 @@ export type Escrow = {
             "type": "u16"
           },
           {
+            "name": "bondAmount",
+            "docs": [
+              "Size of each side's bond (`amount * bond_bps / 10000`, fixed at create). The",
+              "freelancer posts it in accept_job and the client matches it in reject, so the",
+              "vault holds amount + one bond after acceptance and amount + two bonds when Frozen."
+            ],
+            "type": "u64"
+          },
+          {
             "name": "reserved",
             "docs": [
-              "Spare space (carved out of the original 64 bytes) so the account size never changes."
+              "Unused space left from the original 64 reserved bytes. New fields must be carved",
+              "out of it so the account size (and every existing account) stays the same."
             ],
             "type": {
               "array": [
                 "u8",
-                45
+                37
               ]
             }
+          }
+        ]
+      }
+    },
+    {
+      "name": "escrowCreated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "escrow",
+            "type": "pubkey"
+          },
+          {
+            "name": "client",
+            "type": "pubkey"
+          },
+          {
+            "name": "freelancer",
+            "type": "pubkey"
+          },
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "id",
+            "type": "u64"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "bondAmount",
+            "type": "u64"
+          },
+          {
+            "name": "deadlineTs",
+            "type": "i64"
           }
         ]
       }
@@ -1171,6 +1778,163 @@ export type Escrow = {
           },
           {
             "name": "burned"
+          },
+          {
+            "name": "accepted"
+          }
+        ]
+      }
+    },
+    {
+      "name": "jobAccepted",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "escrow",
+            "type": "pubkey"
+          },
+          {
+            "name": "freelancer",
+            "type": "pubkey"
+          },
+          {
+            "name": "bondAmount",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "refunded",
+      "docs": [
+        "Emitted by `refund_if_late`."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "escrow",
+            "type": "pubkey"
+          },
+          {
+            "name": "to",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "rejected",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "escrow",
+            "type": "pubkey"
+          },
+          {
+            "name": "clientBond",
+            "type": "u64"
+          },
+          {
+            "name": "frozenAt",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "released",
+      "docs": [
+        "Emitted by `release` and by `claim_if_silent`. `conceded` is true when the client",
+        "released from `Frozen`, i.e. gave in during a dispute and forfeited their bond."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "escrow",
+            "type": "pubkey"
+          },
+          {
+            "name": "to",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "conceded",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "settled",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "escrow",
+            "type": "pubkey"
+          },
+          {
+            "name": "burned",
+            "type": "u64"
+          },
+          {
+            "name": "toFreelancer",
+            "type": "u64"
+          },
+          {
+            "name": "toClient",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "settlementProposed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "escrow",
+            "type": "pubkey"
+          },
+          {
+            "name": "proposer",
+            "docs": [
+              "1 = client, 2 = freelancer."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "freelancerBps",
+            "type": "u16"
+          }
+        ]
+      }
+    },
+    {
+      "name": "withdrawn",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "escrow",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
           }
         ]
       }

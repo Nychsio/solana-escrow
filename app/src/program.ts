@@ -11,7 +11,7 @@ import { PROGRAM_ID } from "./config";
 export type EscrowProgram = Program<Escrow>;
 export type EscrowAccount = Awaited<ReturnType<EscrowProgram["account"]["escrow"]["fetch"]>>;
 export type StateName =
-  | "funded" | "delivered" | "released" | "refunded" | "frozen" | "settled" | "burned";
+  | "funded" | "accepted" | "delivered" | "released" | "refunded" | "frozen" | "settled" | "burned";
 
 export const stateOf = (e: EscrowAccount) => Object.keys(e.state)[0] as StateName;
 

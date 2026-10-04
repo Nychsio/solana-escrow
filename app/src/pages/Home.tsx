@@ -14,6 +14,7 @@ type Row = { pda: PublicKey; esc: EscrowAccount };
 function nextDeadline(e: EscrowAccount): number | null {
   switch (stateOf(e)) {
     case "funded":
+    case "accepted":
       return e.deadlineTs.toNumber();
     case "delivered":
       return e.deliveredAt ? e.deliveredAt.toNumber() + e.reviewWindowSecs.toNumber() : null;

@@ -19,6 +19,11 @@ const PL: Record<string, string> = {
   ProposerCannotAccept: "Nie możesz przyjąć własnej propozycji.",
   SettlementMismatch: "Propozycja się zmieniła, odśwież.",
   VaultNotEmpty: "Skarbiec nie jest pusty.",
+  UnsupportedMint: "Ten token nie jest obsługiwany (niedozwolone rozszerzenie).",
+  TermsMismatch: "Warunki umowy zmieniły się od momentu, gdy je oglądałeś — odśwież.",
+  SameParty: "Zleceniodawca i zleceniobiorca muszą być różnymi portfelami.",
+  WindowTooLong: "Termin i okna nie mogą być dłuższe niż 90 dni.",
+  InvalidReviewWindow: "Okno akceptacji musi być większe od zera.",
 };
 
 type AnyErr = {

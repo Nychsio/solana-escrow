@@ -1,7 +1,7 @@
 import { ArrowRight, Plus } from "@phosphor-icons/react";
 import { Card, Hero } from "../components/ui";
 import { BN } from "@anchor-lang/core";
-import { TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync } from "@solana/spl-token";
+import { TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync, getMint } from "@solana/spl-token";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
 import { useEffect, useState } from "react";
@@ -44,6 +44,8 @@ export function NewEscrow() {
   const [deadline, setDeadline] = useState(() => toLocalInput(Math.floor(Date.now() / 1000) + 600));
   const [review, setReview] = useState(120);
   const [dispute, setDispute] = useState(120);
+  const [bondPct, setBondPct] = useState("20");
+  const [freezeWarn, setFreezeWarn] = useState(false);
   const [balance, setBalance] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -60,6 +62,26 @@ export function NewEscrow() {
     }
   }, [publicKey, mint, connection]);
 
+  // Warn when the mint has a freeze authority: its holder can freeze the vault.
+  useEffect(() => {
+    let alive = true;
+    setFreezeWarn(false);
+    (async () => {
+      try {
+        const key = new PublicKey(mint.trim());
+        const info = await connection.getAccountInfo(key);
+        if (!info) return;
+        const m = await getMint(connection, key, "confirmed", info.owner);
+        if (alive) setFreezeWarn(m.freezeAuthority !== null);
+      } catch {
+        /* not a mint (yet): no warning */
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [mint, connection]);
+
   if (!publicKey)
     return (
       <div className="page">
@@ -70,6 +92,8 @@ export function NewEscrow() {
   const submit = async () => {
     setFormError(null);
     let freelancerPk: PublicKey, mintPk: PublicKey, amountBase: BN;
+    const pct = Number(bondPct.replace(",", "."));
+    if (!Number.isFinite(pct) || pct < 0 || pct > 100) return setFormError("Kaucja musi być w zakresie 0–100%.");
     try {
       freelancerPk = new PublicKey(freelancer.trim());
       mintPk = new PublicKey(mint.trim());
@@ -79,6 +103,9 @@ export function NewEscrow() {
     }
     const deadlineTs = Math.floor(new Date(deadline).getTime() / 1000);
     if (deadlineTs <= now) return setFormError("Termin musi być w przyszłości.");
+    const MAX = 90 * 86400;
+    if (deadlineTs - now > MAX || review > MAX || dispute > MAX) return setFormError("Termin i okna nie mogą być dłuższe niż 90 dni.");
+    if (review <= 0) return setFormError("Okno akceptacji musi być większe od zera.");
     if (freelancerPk.equals(publicKey)) return setFormError("Zleceniobiorca musi być innym portfelem niż zleceniodawca.");
 
     // id = timestamp in ms: unique per client, becomes part of the PDA seeds.
@@ -86,7 +113,7 @@ export function NewEscrow() {
     const escrow = escrowPda(publicKey, id);
     const sig = await run("Utworzenie umowy (create)", () =>
       program.methods
-        .create(id, amountBase, new BN(deadlineTs), new BN(review), new BN(dispute))
+        .create(id, amountBase, new BN(deadlineTs), new BN(review), new BN(dispute), Math.round(pct * 100))
         .accountsPartial({
           client: publicKey,
           freelancer: freelancerPk,
@@ -115,6 +142,7 @@ export function NewEscrow() {
           <label className="field">Token (mint)
             <input value={mint} onChange={(e) => setMint(e.target.value)} />
             <small>Twoje saldo: {balance ?? "?"}</small>
+            {freezeWarn && <small className="error">Emitent tokena może zamrozić skarbiec (np. USDC/Circle).</small>}
           </label>
           <label className="field">Kwota (w tokenach)
             <input value={amount} onChange={(e) => setAmount(e.target.value)} />
@@ -129,6 +157,10 @@ export function NewEscrow() {
               <button onClick={() => plus(86400)}>za 24 h</button>
             </div>
           </div>
+          <label className="field">Kaucja obu stron (% kwoty)
+            <input type="number" min={0} max={100} step={1} value={bondPct} onChange={(e) => setBondPct(e.target.value)} />
+            <small>Zleceniobiorca wpłaca ją przy akceptacji, zleceniodawca przy odrzuceniu. Kto ustąpi w sporze, traci swoją.</small>
+          </label>
           <div className="field-pair">
             <label className="field">Okno akceptacji
               <select value={review} onChange={(e) => setReview(Number(e.target.value))}>

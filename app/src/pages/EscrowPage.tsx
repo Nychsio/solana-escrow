@@ -9,6 +9,7 @@ import {
   Fire,
   Handshake,
   ListChecks,
+  UserCheck,
   Scales,
   SealCheck,
   Timer,
@@ -18,6 +19,7 @@ import {
   type Icon,
 } from "@phosphor-icons/react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
+import { EventParser } from "@anchor-lang/core";
 import { PublicKey } from "@solana/web3.js";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Actions } from "../components/Actions";
@@ -28,10 +30,15 @@ import { txUrl } from "../config";
 import { countdown, fmtDate, fromBase, toHex } from "../format";
 import { stateOf, useChainNow, useProgram, vaultOf, type EscrowAccount, type StateName } from "../program";
 
-type HistItem = { sig: string; ok: boolean; time: number | null; ix: string; closes: boolean };
+type HistItem = { sig: string; ok: boolean; time: number | null; ix: string; closes: boolean; conceded: boolean };
 
 // Friendlier names for instructions whose log name alone is unclear.
-const IX_LABELS: Record<string, string> = { CancelByFreelancer: "Rezygnacja zleceniobiorcy (CancelByFreelancer)" };
+const IX_LABELS: Record<string, string> = {
+  CancelByFreelancer: "Rezygnacja zleceniobiorcy (CancelByFreelancer)",
+  AcceptJob: "Akceptacja zlecenia (AcceptJob)",
+  Withdraw: "Wycofanie środków (Withdraw)",
+  Release: "Wypłata (Release)",
+};
 
 export type EscrowView = {
   pda: PublicKey;
@@ -42,9 +49,10 @@ export type EscrowView = {
   vaultBal: string | null;
 };
 
-const STATES: StateName[] = ["funded", "delivered", "released", "refunded", "frozen", "settled", "burned"];
+const STATES: StateName[] = ["funded", "accepted", "delivered", "released", "refunded", "frozen", "settled", "burned"];
 export const STATE_PL: Record<StateName, string> = {
-  funded: "Opłacona",
+  funded: "Czeka na zleceniobiorcę",
+  accepted: "Zaakceptowana",
   delivered: "Dostarczona",
   released: "Wypłacona",
   refunded: "Zwrócona",
@@ -54,6 +62,7 @@ export const STATE_PL: Record<StateName, string> = {
 };
 export const STATE_ICON: Record<StateName, Icon> = {
   funded: Vault,
+  accepted: UserCheck,
   delivered: UploadSimple,
   released: SealCheck,
   refunded: ArrowsClockwise,
@@ -64,12 +73,13 @@ export const STATE_ICON: Record<StateName, Icon> = {
 // States that were passed on the way to the given state (delivered only if a delivery happened).
 const BEFORE: Record<StateName, StateName[]> = {
   funded: [],
-  delivered: ["funded"],
-  released: ["funded", "delivered"],
+  accepted: ["funded"],
+  delivered: ["funded", "accepted"],
+  released: ["funded", "accepted", "delivered"],
   refunded: ["funded"],
-  frozen: ["funded", "delivered"],
-  settled: ["funded", "delivered", "frozen"],
-  burned: ["funded", "delivered", "frozen"],
+  frozen: ["funded", "accepted", "delivered"],
+  settled: ["funded", "accepted", "delivered", "frozen"],
+  burned: ["funded", "accepted", "delivered", "frozen"],
 };
 
 function History({ items, onRefresh }: { items: HistItem[]; onRefresh: () => void }) {
@@ -79,7 +89,7 @@ function History({ items, onRefresh }: { items: HistItem[]; onRefresh: () => voi
         {items.map((h) => (
           <li key={h.sig}>
             <span className="muted">{h.time ? fmtDate(h.time) : "?"}</span>
-            <b>{IX_LABELS[h.ix] ?? h.ix}{h.ok ? "" : " (błąd)"}</b>
+            <b>{h.conceded ? "Ustąpienie zleceniodawcy (Release)" : IX_LABELS[h.ix] ?? h.ix}{h.ok ? "" : " (błąd)"}</b>
             <a href={txUrl(h.sig)} target="_blank" rel="noreferrer">
               <span className="mono">{h.sig.slice(0, 12)}…</span>
               <ArrowSquareOut size={18} weight="duotone" />
@@ -142,17 +152,28 @@ export function EscrowPage({ address }: { address: string }) {
       sigs.map((s) => s.signature),
       { maxSupportedTransactionVersion: 0, commitment: "confirmed" }
     );
+    const parser = new EventParser(program.programId, program.coder);
     return sigs.map((s, i) => {
       const logs = txs[i]?.meta?.logMessages ?? [];
+      // Released { conceded: true } = the client gave in from Frozen.
+      let conceded = false;
+      try {
+        for (const ev of parser.parseLogs(logs)) {
+          if (ev.name === "released" && (ev.data as { conceded?: boolean }).conceded) conceded = true;
+        }
+      } catch {
+        /* events unreadable: plain label */
+      }
       return {
         sig: s.signature,
         ok: !s.err,
         time: s.blockTime ?? null,
         ix: logs.map((l) => l.match(/^Program log: Instruction: (\w+)/)?.[1]).find(Boolean) ?? "?",
         closes: !s.err && logs.some((l) => l.includes("Instruction: CloseEscrow")),
+        conceded,
       };
     });
-  }, [pda, connection]);
+  }, [pda, connection, program]);
 
   const loadHistory = useCallback(async () => {
     setHistory(await fetchHistory());
@@ -247,8 +268,9 @@ export function EscrowPage({ address }: { address: string }) {
   const view: EscrowView = { pda, esc, now, role, reload, vaultBal };
 
   const lead = {
-    funded: now <= deadline ? "Środki są w skarbcu. Czekamy na dostawę od zleceniobiorcy." : "Termin dostawy minął. Zleceniodawca może odzyskać środki.",
-    delivered: reviewEnd && now <= reviewEnd ? "Dostawa zgłoszona. Zleceniodawca ma czas na akceptację albo odrzucenie." : "Okno akceptacji minęło. Zleceniobiorca może odebrać wypłatę.",
+    funded: now <= deadline ? "Środki są w skarbcu. Czekamy, aż zleceniobiorca przyjmie zlecenie i wpłaci kaucję." : "Termin minął, a zlecenie nie zostało przyjęte. Każdy może zwrócić środki zleceniodawcy.",
+    accepted: now <= deadline ? "Zleceniobiorca przyjął zlecenie i wpłacił kaucję. Czekamy na dostawę." : "Termin dostawy minął. Każdy może zwrócić środki zleceniodawcy razem z kaucją zleceniobiorcy.",
+    delivered: reviewEnd && now <= reviewEnd ? "Dostawa zgłoszona. Zleceniodawca ma czas na akceptację albo odrzucenie." : "Okno akceptacji minęło. Każdy może wypłacić środki zleceniobiorcy.",
     released: "Wypłacono zleceniobiorcy. Umowa zakończona.",
     refunded: "Środki wróciły do zleceniodawcy. Umowa zakończona.",
     frozen: disputeEnd && now > disputeEnd ? "Okno sporu minęło. Każdy może spalić środki." : "Dostawa odrzucona. Strony mogą się dogadać przed końcem okna sporu.",
@@ -258,7 +280,21 @@ export function EscrowPage({ address }: { address: string }) {
   const roleLabel = role === "client" ? "zleceniodawca" : role === "freelancer" ? "zleceniobiorca" : "obserwator";
   const RoleIcon = role === "freelancer" ? Briefcase : User;
 
-  const done = (s: StateName) => BEFORE[state].includes(s) && (s !== "delivered" || !!esc.deliveredAt);
+  const wasDelivered = !!esc.deliveredAt || state === "delivered";
+  const done = (s: StateName) =>
+    BEFORE[state].includes(s) && ((s !== "delivered" && s !== "accepted") || wasDelivered);
+  // Who has already paid into the vault, derived from the state.
+  const hasBond = !esc.bondAmount.isZero();
+  const paid = {
+    funded: "wpłacone: zleceniodawca (kwota)",
+    accepted: `wpłacone: zleceniodawca (kwota)${hasBond ? " i zleceniobiorca (kaucja)" : ""}`,
+    delivered: `wpłacone: zleceniodawca (kwota)${hasBond ? " i zleceniobiorca (kaucja)" : ""}`,
+    frozen: `wpłacone: zleceniodawca (kwota${hasBond ? " + kaucja" : ""})${hasBond ? " i zleceniobiorca (kaucja)" : ""}`,
+    released: "rozliczone",
+    refunded: "rozliczone",
+    settled: "rozliczone",
+    burned: "rozliczone",
+  }[state];
   const SI = STATE_ICON[state];
 
   return (
@@ -300,6 +336,10 @@ export function EscrowPage({ address }: { address: string }) {
               <Def icon={User} label="Zleceniodawca"><Addr value={esc.client.toBase58()} /></Def>
               <Def icon={Briefcase} label="Zleceniobiorca"><Addr value={esc.freelancer.toBase58()} /></Def>
               <Def label="Token"><Addr value={esc.mint.toBase58()} /></Def>
+              <Def icon={Vault} label="Kaucja (każda strona)">
+                <span className="mono">{fromBase(esc.bondAmount)}</span>{" "}
+                <span className="muted">({esc.bondAmount.isZero() ? "brak" : paid})</span>
+              </Def>
               <Def icon={Vault} label="Skarbiec">
                 <span className="mono big-num">{vaultBal ?? "?"}</span>{" "}
                 <Addr value={vaultOf(esc.mint, pda).toBase58()} />
