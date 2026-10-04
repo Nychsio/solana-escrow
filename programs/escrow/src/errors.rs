@@ -46,4 +46,10 @@ pub enum ErrorCode {
     WindowTooLong,
     #[msg("Review window must be greater than zero")]
     InvalidReviewWindow,
+    #[msg("The revealed key does not match the committed key hash")]
+    InvalidKey,
+    #[msg("This delivery is sealed: claim it by revealing the key (claim_with_key)")]
+    SealedDeliveryUseKey,
+    #[msg("This delivery is not sealed")]
+    NotSealed,
 }

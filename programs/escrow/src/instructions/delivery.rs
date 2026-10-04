@@ -102,7 +102,14 @@ pub fn accept_job(
 }
 
 /// Freelancer reports delivery before the deadline; starts the review window.
-pub fn mark_delivered(ctx: Context<MarkDelivered>, deliverable_hash: [u8; 32]) -> Result<()> {
+/// `key_hash` all zeros = open delivery (the client sees the work and the freelancer is
+/// paid as before). Non-zero = sealed: `deliverable_hash` is the hash of the ciphertext,
+/// `key_hash` the hash of the key, and the freelancer is paid only by revealing the key.
+pub fn mark_delivered(
+    ctx: Context<MarkDelivered>,
+    deliverable_hash: [u8; 32],
+    key_hash: [u8; 32],
+) -> Result<()> {
     let escrow = &mut ctx.accounts.escrow;
     escrow.require_state(&[EscrowState::Accepted])?;
     let now = Clock::get()?.unix_timestamp;
@@ -110,11 +117,13 @@ pub fn mark_delivered(ctx: Context<MarkDelivered>, deliverable_hash: [u8; 32]) -
 
     escrow.delivered_at = Some(now);
     escrow.deliverable_hash = deliverable_hash;
+    escrow.key_hash = key_hash;
     escrow.state = EscrowState::Delivered;
     emit!(Delivered {
         escrow: ctx.accounts.escrow.key(),
         delivered_at: now,
         deliverable_hash,
+        key_hash,
     });
     Ok(())
 }

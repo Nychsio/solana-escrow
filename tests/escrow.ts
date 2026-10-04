@@ -24,6 +24,7 @@ import {
   Transaction,
 } from "@solana/web3.js";
 import { assert } from "chai";
+import { createHash, randomBytes } from "crypto";
 import { getMint } from "@solana/spl-token";
 import { Escrow } from "../target/types/escrow";
 
@@ -41,6 +42,10 @@ describe("escrow", () => {
   const MINTED = 100_000_000_000;
   const AMOUNT = new BN(250_000_000);
   const HASH = Array.from({ length: 32 }, (_, i) => i + 1);
+  // key_hash of all zeros = an open delivery; anything else seals it.
+  const ZERO_HASH = new Array(32).fill(0);
+  const sha256 = (data: Buffer) =>
+    Array.from(createHash("sha256").update(data).digest());
   const LONG = 7 * 24 * 60 * 60;
 
   let mint: PublicKey;
@@ -208,9 +213,13 @@ describe("escrow", () => {
       .signers([signer])
       .rpc();
 
-  const markDelivered = (escrow: PublicKey, signer = freelancer) =>
+  const markDelivered = (
+    escrow: PublicKey,
+    signer = freelancer,
+    keyHash: number[] = ZERO_HASH
+  ) =>
     program.methods
-      .markDelivered(HASH)
+      .markDelivered(HASH, keyHash)
       .accountsPartial({ freelancer: signer.publicKey, escrow })
       .signers([signer])
       .rpc();
@@ -337,6 +346,43 @@ describe("escrow", () => {
       .signers([signer])
       .rpc();
 
+  const claimWithKey = (
+    escrow: PublicKey,
+    key: Buffer | number[],
+    caller = stranger,
+    destination = freelancerToken
+  ) =>
+    program.methods
+      .claimWithKey(Array.from(key))
+      .accountsPartial({
+        caller: caller.publicKey,
+        escrow,
+        mint,
+        vault: vaultOf(escrow),
+        freelancerToken: destination,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([caller])
+      .rpc();
+
+  const refundUnrevealed = (
+    escrow: PublicKey,
+    caller = stranger,
+    destination = clientToken
+  ) =>
+    program.methods
+      .refundUnrevealed()
+      .accountsPartial({
+        caller: caller.publicKey,
+        escrow,
+        mint,
+        vault: vaultOf(escrow),
+        clientToken: destination,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([caller])
+      .rpc();
+
   const closeEscrow = (escrow: PublicKey, signer = client) =>
     program.methods
       .closeEscrow()
@@ -381,10 +427,10 @@ describe("escrow", () => {
   const freeze = async (
     disputeWindowSecs = 3600,
     amount = AMOUNT,
-    opts: { bondBps?: number } = {}
+    opts: { bondBps?: number; keyHash?: number[] } = {}
   ) => {
     const { escrow } = await open(LONG, 3600, disputeWindowSecs, amount, opts);
-    await markDelivered(escrow);
+    await markDelivered(escrow, freelancer, opts.keyHash);
     await reject(escrow);
     return escrow;
   };
@@ -411,6 +457,8 @@ describe("escrow", () => {
     await expectError(cancel(escrow), "InvalidState");
     await expectError(acceptJob(escrow), "InvalidState");
     await expectError(withdraw(escrow), "InvalidState");
+    await expectError(claimWithKey(escrow, ZERO_HASH), "InvalidState");
+    await expectError(refundUnrevealed(escrow), "InvalidState");
   };
 
   const expectError = async (promise: Promise<unknown>, code: string) => {
@@ -498,9 +546,12 @@ describe("escrow", () => {
       assert.equal(account.settleBps, 0);
       assert.equal(account.bondAmount.toString(), "0");
       assert.deepEqual(account.reserved, new Array(37).fill(0));
-      // 8-byte discriminator + 235 bytes: the layout size must never change.
+      // 8-byte discriminator + 307 bytes (235 + the 72 B of the sealed delivery fields).
       const info = await connection.getAccountInfo(escrow);
-      assert.equal(info!.data.length, 8 + 235);
+      assert.equal(info!.data.length, 8 + 307);
+      assert.deepEqual(account.keyHash, ZERO_HASH);
+      assert.deepEqual(account.revealedKey, ZERO_HASH);
+      assert.equal(account.approvedAt.toString(), "0");
       assert.isNull(account.deliveredAt);
       assert.deepEqual(account.deliverableHash, new Array(32).fill(0));
       assert.deepEqual(account.state, { funded: {} });
@@ -1645,6 +1696,205 @@ describe("escrow", () => {
       await waitForDisputeEnd(frozen);
       const burned = await only(await burn(frozen), "Burned");
       assert.equal(burned.amount.toString(), AMOUNT.toString());
+    });
+  });
+
+  describe("sealed delivery", () => {
+    const BOND_BPS = 2000;
+    const BOND = (AMOUNT.toNumber() * BOND_BPS) / 10000; // 50_000_000
+    const bal = async (account: PublicKey) => Number(await balance(account));
+    const eventsOf = async (signature: string) => {
+      const tx = await connection.getTransaction(signature, {
+        commitment: "confirmed",
+        maxSupportedTransactionVersion: 0,
+      });
+      const parser = new anchor.EventParser(program.programId, program.coder);
+      return Array.from(parser.parseLogs(tx!.meta!.logMessages!));
+    };
+    const only = async (signature: string, name: string) => {
+      const found = (await eventsOf(signature)).filter(
+        (e) => e.name.toLowerCase() === name.toLowerCase()
+      );
+      assert.equal(found.length, 1, `expected one ${name} event`);
+      return found[0].data as any;
+    };
+
+    // A delivery sealed under a fresh random key (the key never goes on chain until claimed).
+    const sealed = async (review = 3600, bondBps = 0) => {
+      const key = randomBytes(32);
+      const { escrow } = await open(LONG, review, 3600, AMOUNT, { bondBps });
+      await markDelivered(escrow, freelancer, sha256(key));
+      return { escrow, key };
+    };
+    const waitReviewEnd = async (escrow: PublicKey, extra = 0) => {
+      const a = await program.account.escrow.fetch(escrow);
+      await waitUntilAfter(
+        (a.deliveredAt as BN).toNumber() + a.reviewWindowSecs.toNumber() + extra
+      );
+    };
+
+    it("pays only against the key: approve, then claim_with_key swaps money and key", async () => {
+      const key = randomBytes(32);
+      const { escrow } = await open(LONG, 3600, 3600, AMOUNT, { bondBps: BOND_BPS });
+      const deliverSig = await markDelivered(escrow, freelancer, sha256(key));
+      const delivered = await only(deliverSig, "Delivered");
+      assert.deepEqual(Array.from(delivered.keyHash), sha256(key));
+      assert.deepEqual((await program.account.escrow.fetch(escrow)).keyHash, sha256(key));
+
+      // Approval moves no money.
+      const freelancerBefore = await bal(freelancerToken);
+      const approvedSig = await release(escrow);
+      assert.deepEqual(await stateOf(escrow), { approved: {} });
+      assert.equal(await bal(vaultOf(escrow)), AMOUNT.toNumber() + BOND);
+      assert.equal(await bal(freelancerToken), freelancerBefore);
+      const approved = await only(approvedSig, "Approved");
+      assert.isFalse(approved.conceded);
+      const afterApprove = await program.account.escrow.fetch(escrow);
+      assert.isAbove(afterApprove.approvedAt.toNumber(), 0);
+      assert.deepEqual(afterApprove.revealedKey, ZERO_HASH);
+
+      // Anyone can send the key; the money still goes to the freelancer.
+      const claimSig = await claimWithKey(escrow, key, stranger);
+      assert.equal(await bal(freelancerToken), freelancerBefore + AMOUNT.toNumber() + BOND);
+      assert.equal(await balance(vaultOf(escrow)), "0");
+      const account = await program.account.escrow.fetch(escrow);
+      assert.deepEqual(account.state, { released: {} });
+      assert.deepEqual(Array.from(account.revealedKey), Array.from(key));
+
+      const revealed = await only(claimSig, "KeyRevealed");
+      assert.deepEqual(Array.from(revealed.key), Array.from(key));
+      await closeEscrow(escrow);
+      assert.isNull(await connection.getAccountInfo(escrow));
+    });
+
+    it("rejects a wrong key and leaves the money in place", async () => {
+      const { escrow, key } = await sealed(3600, BOND_BPS);
+      await release(escrow);
+      await expectError(claimWithKey(escrow, randomBytes(32)), "InvalidKey");
+      const flipped = Buffer.from(key);
+      flipped[0] ^= 1;
+      await expectError(claimWithKey(escrow, flipped), "InvalidKey");
+      assert.deepEqual(await stateOf(escrow), { approved: {} });
+      assert.equal(await bal(vaultOf(escrow)), AMOUNT.toNumber() + BOND);
+      assert.deepEqual((await program.account.escrow.fetch(escrow)).revealedKey, ZERO_HASH);
+    });
+
+    it("claim_with_key needs a sealed delivery in Approved, or Delivered after the review window", async () => {
+      const { escrow, key } = await sealed();
+      await expectError(claimWithKey(escrow, key), "ReviewWindowOpen");
+
+      const open1 = await open(LONG, 3600);
+      await expectError(claimWithKey(open1.escrow, key), "InvalidState");
+      await markDelivered(open1.escrow);
+      await expectError(claimWithKey(open1.escrow, key), "NotSealed");
+
+      // The destination is pinned to the freelancer.
+      await release(escrow);
+      await expectError(claimWithKey(escrow, key, stranger, strangerToken), "ConstraintTokenOwner");
+      assert.equal(await balance(vaultOf(escrow)), AMOUNT.toString());
+    });
+
+    it("a silent client cannot block payment, but silence alone never pays a sealed delivery", async () => {
+      const { escrow, key } = await sealed(3);
+      await waitReviewEnd(escrow);
+      await expectError(claimIfSilent(escrow), "SealedDeliveryUseKey");
+
+      const supplyBefore = (await getMint(connection, mint)).supply;
+      await expectPayout(escrow, freelancerToken, () => claimWithKey(escrow, key));
+      assert.deepEqual(await stateOf(escrow), { released: {} });
+      assert.equal(
+        (await getMint(connection, mint)).supply.toString(),
+        supplyBefore.toString()
+      );
+    });
+
+    it("refund_unrevealed after an approval nobody unlocked: the client gets amount plus the freelancer's bond", async () => {
+      const { escrow } = await sealed(3, BOND_BPS);
+      await release(escrow);
+      await expectError(refundUnrevealed(escrow), "ReviewWindowOpen");
+      await expectError(refundUnrevealed(escrow, stranger, strangerToken), "ConstraintTokenOwner");
+
+      const a = await program.account.escrow.fetch(escrow);
+      await waitUntilAfter(a.approvedAt.toNumber() + 3);
+      const clientBefore = await bal(clientToken);
+      await refundUnrevealed(escrow, stranger);
+      assert.equal(await bal(clientToken), clientBefore + AMOUNT.toNumber() + BOND);
+      assert.equal(await balance(vaultOf(escrow)), "0");
+      assert.deepEqual(await stateOf(escrow), { refunded: {} });
+    });
+
+    it("refund_unrevealed from Delivered only after the review window and the key window", async () => {
+      const { escrow, key } = await sealed(3, BOND_BPS);
+      await expectError(refundUnrevealed(escrow), "ReviewWindowOpen");
+      await waitReviewEnd(escrow); // review over: the freelancer can still reveal
+      await expectError(refundUnrevealed(escrow), "ReviewWindowOpen");
+      await waitReviewEnd(escrow, 3); // key window over as well
+      const clientBefore = await bal(clientToken);
+      await refundUnrevealed(escrow);
+      assert.equal(await bal(clientToken), clientBefore + AMOUNT.toNumber() + BOND);
+      assert.deepEqual(await stateOf(escrow), { refunded: {} });
+      await expectError(claimWithKey(escrow, key), "InvalidState");
+    });
+
+    it("refund_unrevealed refuses an open delivery", async () => {
+      const { escrow } = await open(LONG, 3);
+      await markDelivered(escrow);
+      await waitReviewEnd(escrow, 3);
+      await expectError(refundUnrevealed(escrow), "NotSealed");
+    });
+
+    it("the client conceding a sealed dispute only approves; the key still pays amount plus both bonds", async () => {
+      const key = randomBytes(32);
+      const escrow = await freeze(3600, AMOUNT, { bondBps: BOND_BPS, keyHash: sha256(key) });
+      await propose(escrow, 5000, client);
+      assert.equal(await bal(vaultOf(escrow)), AMOUNT.toNumber() + 2 * BOND);
+
+      const approvedSig = await release(escrow);
+      assert.isTrue((await only(approvedSig, "Approved")).conceded);
+      const account = await program.account.escrow.fetch(escrow);
+      assert.deepEqual(account.state, { approved: {} });
+      assert.equal(account.settleProposer, 0);
+      assert.equal(account.settleBps, 0);
+      assert.equal(await bal(vaultOf(escrow)), AMOUNT.toNumber() + 2 * BOND);
+
+      const freelancerBefore = await bal(freelancerToken);
+      const supplyBefore = (await getMint(connection, mint)).supply;
+      await claimWithKey(escrow, key);
+      assert.equal(await bal(freelancerToken), freelancerBefore + AMOUNT.toNumber() + 2 * BOND);
+      assert.equal(
+        (await getMint(connection, mint)).supply.toString(),
+        supplyBefore.toString()
+      );
+    });
+
+    it("cancel from Approved returns the freelancer's bond and the amount to the client", async () => {
+      const { escrow } = await sealed(3600, BOND_BPS);
+      await release(escrow);
+      const clientBefore = await bal(clientToken);
+      const freelancerBefore = await bal(freelancerToken);
+      await cancel(escrow);
+      assert.equal(await bal(clientToken), clientBefore + AMOUNT.toNumber());
+      assert.equal(await bal(freelancerToken), freelancerBefore + BOND);
+      assert.equal(await balance(vaultOf(escrow)), "0");
+      assert.deepEqual(await stateOf(escrow), { refunded: {} });
+    });
+
+    it("a settlement on a sealed delivery does not hand over the key", async () => {
+      const key = randomBytes(32);
+      const escrow = await freeze(3600, AMOUNT, { keyHash: sha256(key) });
+      await propose(escrow, 6000, client);
+      await accept(escrow, 6000, freelancer);
+      const account = await program.account.escrow.fetch(escrow);
+      assert.deepEqual(account.state, { settled: {} });
+      assert.deepEqual(account.revealedKey, ZERO_HASH);
+      assert.deepEqual(account.keyHash, sha256(key));
+    });
+
+    it("approving is client-only", async () => {
+      const { escrow } = await sealed();
+      await expectError(release(escrow, freelancer), "Unauthorized");
+      await expectError(release(escrow, stranger), "Unauthorized");
+      assert.deepEqual(await stateOf(escrow), { delivered: {} });
     });
   });
 

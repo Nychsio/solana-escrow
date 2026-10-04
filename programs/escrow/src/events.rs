@@ -33,6 +33,24 @@ pub struct Delivered {
     pub escrow: Pubkey,
     pub delivered_at: i64,
     pub deliverable_hash: [u8; 32],
+    /// All zeros for an open delivery; otherwise the hash of the key that unlocks the work.
+    pub key_hash: [u8; 32],
+}
+
+/// The client approved a sealed delivery (or conceded a dispute over one). No money
+/// moved yet: the freelancer is paid in the transaction that reveals the key.
+#[event]
+pub struct Approved {
+    pub escrow: Pubkey,
+    pub approved_at: i64,
+    pub conceded: bool,
+}
+
+/// The key to a sealed delivery, published in the same transaction that pays for it.
+#[event]
+pub struct KeyRevealed {
+    pub escrow: Pubkey,
+    pub key: [u8; 32],
 }
 
 /// Emitted by `release` and by `claim_if_silent`. `conceded` is true when the client

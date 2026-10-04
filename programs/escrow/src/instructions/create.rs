@@ -125,6 +125,9 @@ pub fn create(
         settle_proposer: SETTLE_NONE,
         settle_bps: 0,
         bond_amount,
+        key_hash: [0; 32],
+        revealed_key: [0; 32],
+        approved_at: 0,
         _reserved: [0; 37],
     });
 

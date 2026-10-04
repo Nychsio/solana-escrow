@@ -31,14 +31,22 @@ pub struct Escrow {
     /// freelancer posts it in accept_job and the client matches it in reject, so the
     /// vault holds amount + one bond after acceptance and amount + two bonds when Frozen.
     pub bond_amount: u64,
+    /// Sealed delivery: sha256 of the key that decrypts the work (all zeros = open delivery).
+    /// `deliverable_hash` then commits to the ciphertext.
+    pub key_hash: [u8; 32],
+    /// The key, stored by claim_with_key in the transaction that pays the freelancer.
+    pub revealed_key: [u8; 32],
+    /// When the client approved a sealed delivery (starts the key-reveal window).
+    pub approved_at: i64,
     /// Unused space left from the original 64 reserved bytes. New fields must be carved
     /// out of it so the account size (and every existing account) stays the same.
     pub _reserved: [u8; 37],
 }
 
-/// The account size shipped with the first dispute-ready layout; a new field must shrink
-/// `_reserved` by the same number of bytes, and this assertion fails the build if not.
-const _: () = assert!(Escrow::INIT_SPACE == 235);
+/// The account size: 235 B of the earlier layout plus 72 B for the sealed delivery fields
+/// (key_hash, revealed_key, approved_at). From here on a new field must shrink `_reserved`
+/// by the same number of bytes, and this assertion fails the build if not.
+const _: () = assert!(Escrow::INIT_SPACE == 307);
 
 pub const MAX_BPS: u16 = 10_000;
 /// Longest deadline (from now) and longest review or dispute window: 90 days.
@@ -56,11 +64,18 @@ pub enum EscrowState {
     Frozen,
     Settled,
     Burned,
-    /// Appended last so the Borsh indices of the older variants never change.
+    /// Appended after the older variants so their Borsh indices never change.
     Accepted,
+    /// Sealed delivery approved by the client; the freelancer is paid when the key is revealed.
+    Approved,
 }
 
 impl Escrow {
+    /// A sealed delivery commits to a key; the freelancer is paid only by revealing it.
+    pub fn is_sealed(&self) -> bool {
+        self.key_hash != [0u8; 32]
+    }
+
     /// Single gate for every state check: an instruction lists the states it accepts and
     /// anything else is rejected. Frozen is accepted by exactly four instructions
     /// (propose_settlement, accept_settlement, burn_if_unsettled and the two concessions,

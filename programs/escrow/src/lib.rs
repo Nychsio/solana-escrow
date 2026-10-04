@@ -55,12 +55,24 @@ pub mod escrow {
         instructions::payout::withdraw(ctx)
     }
 
-    pub fn mark_delivered(ctx: Context<MarkDelivered>, deliverable_hash: [u8; 32]) -> Result<()> {
-        instructions::delivery::mark_delivered(ctx, deliverable_hash)
+    pub fn mark_delivered(
+        ctx: Context<MarkDelivered>,
+        deliverable_hash: [u8; 32],
+        key_hash: [u8; 32],
+    ) -> Result<()> {
+        instructions::delivery::mark_delivered(ctx, deliverable_hash, key_hash)
     }
 
     pub fn release(ctx: Context<Release>) -> Result<()> {
         instructions::payout::release(ctx)
+    }
+
+    pub fn claim_with_key(ctx: Context<ClaimWithKey>, key: [u8; 32]) -> Result<()> {
+        instructions::payout::claim_with_key(ctx, key)
+    }
+
+    pub fn refund_unrevealed(ctx: Context<RefundUnrevealed>) -> Result<()> {
+        instructions::payout::refund_unrevealed(ctx)
     }
 
     pub fn claim_if_silent(ctx: Context<ClaimIfSilent>) -> Result<()> {
