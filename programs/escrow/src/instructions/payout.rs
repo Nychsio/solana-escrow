@@ -140,14 +140,20 @@ pub struct Withdraw<'info> {
     pub token_program: Interface<'info, TokenInterface>,
 }
 
-/// Client accepts the work (or pays early) and the vault goes to the freelancer.
+/// Client accepts the work (or pays early) and the vault goes to the freelancer. From
+/// `Frozen` it is the client conceding the dispute: the freelancer gets the whole vault,
+/// including the client's own bond, which is what makes backing down cost something.
 pub fn release(ctx: Context<Release>) -> Result<()> {
     let escrow = &mut ctx.accounts.escrow;
     escrow.require_state(&[
         EscrowState::Funded,
         EscrowState::Accepted,
         EscrowState::Delivered,
+        EscrowState::Frozen,
     ])?;
+    let conceded = escrow.state == EscrowState::Frozen;
+    escrow.settle_proposer = SETTLE_NONE;
+    escrow.settle_bps = 0;
     escrow.state = EscrowState::Released;
 
     let amount = ctx.accounts.vault.amount;
@@ -163,6 +169,7 @@ pub fn release(ctx: Context<Release>) -> Result<()> {
         escrow: ctx.accounts.escrow.key(),
         to: ctx.accounts.escrow.freelancer,
         amount,
+        conceded,
     });
     Ok(())
 }
@@ -188,6 +195,7 @@ pub fn claim_if_silent(ctx: Context<ClaimIfSilent>) -> Result<()> {
         escrow: ctx.accounts.escrow.key(),
         to: ctx.accounts.escrow.freelancer,
         amount,
+        conceded: false,
     });
     Ok(())
 }
@@ -240,11 +248,13 @@ pub fn withdraw(ctx: Context<Withdraw>) -> Result<()> {
     Ok(())
 }
 
-/// Freelancer unwinds the deal, no burn: they get their own bond back (if they paid
-/// one, i.e. the job was accepted) and the client gets the rest of the vault. Only the
-/// signer gives anything up. The one time rule: walking away from an accepted job
-/// after the deadline is abandonment, so the bond goes to the client (the same
-/// outcome as refund_if_late), otherwise quitting late would cost nothing.
+/// Freelancer unwinds the deal, no burn. Only the signer gives anything up:
+/// - before the deadline (Accepted) or after a delivery: they get their own bond back
+///   and the client gets the rest of the vault;
+/// - from `Frozen` it is the freelancer conceding the dispute: the whole vault, their
+///   bond included, goes to the client (the mirror of the client's release);
+/// - from Accepted after the deadline it is abandonment, so the bond goes to the client
+///   too (the same outcome as refund_if_late), otherwise quitting late would be free.
 pub fn cancel_by_freelancer(ctx: Context<CancelByFreelancer>) -> Result<()> {
     let escrow = &mut ctx.accounts.escrow;
     escrow.require_state(&[
@@ -257,7 +267,8 @@ pub fn cancel_by_freelancer(ctx: Context<CancelByFreelancer>) -> Result<()> {
     let now = Clock::get()?.unix_timestamp;
     let freelancer_bond_paid = escrow.state != EscrowState::Funded;
     let abandoned = escrow.state == EscrowState::Accepted && now > escrow.deadline_ts;
-    let freelancer_amount = if freelancer_bond_paid && !abandoned {
+    let conceded = escrow.state == EscrowState::Frozen;
+    let freelancer_amount = if freelancer_bond_paid && !abandoned && !conceded {
         escrow.bond_amount.min(vault_amount)
     } else {
         0

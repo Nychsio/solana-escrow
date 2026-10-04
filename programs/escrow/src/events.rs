@@ -35,12 +35,14 @@ pub struct Delivered {
     pub deliverable_hash: [u8; 32],
 }
 
-/// Emitted by `release` and by `claim_if_silent`.
+/// Emitted by `release` and by `claim_if_silent`. `conceded` is true when the client
+/// released from `Frozen`, i.e. gave in during a dispute and forfeited their bond.
 #[event]
 pub struct Released {
     pub escrow: Pubkey,
     pub to: Pubkey,
     pub amount: u64,
+    pub conceded: bool,
 }
 
 /// Emitted by `refund_if_late`.

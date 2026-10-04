@@ -644,7 +644,7 @@ describe("escrow", () => {
         Math.max(deadlineTs, (account.deliveredAt as BN).toNumber() + 3)
       );
 
-      await expectError(release(escrow), "InvalidState");
+      // release is not on this list any more: from Frozen it is the client conceding.
       await expectError(claimIfSilent(escrow), "InvalidState");
       await expectError(refundIfLate(escrow), "InvalidState");
       await expectError(markDelivered(escrow), "InvalidState");
@@ -1384,22 +1384,60 @@ describe("escrow", () => {
       assert.equal(await balance(vaultOf(escrow)), "0");
     });
 
-    it("cancel from Frozen returns each side exactly its own deposit, no burn", async () => {
+    it("cancel from Frozen is the freelancer conceding: the client gets the whole vault, no burn", async () => {
       const escrow = await freeze(3600, AMOUNT, withBond);
+      await propose(escrow, 5000, freelancer);
       const clientBefore = await bal(clientToken);
       const freelancerBefore = await bal(freelancerToken);
       const supplyBefore = (await getMint(connection, mint)).supply;
       await cancel(escrow);
-      // Client: its amount plus its own bond; freelancer: its bond.
+      // The client gets amount + both bonds; the freelancer forfeits theirs.
       assert.equal(
         await bal(clientToken),
-        clientBefore + AMOUNT.toNumber() + BOND
+        clientBefore + AMOUNT.toNumber() + 2 * BOND
       );
-      assert.equal(await bal(freelancerToken), freelancerBefore + BOND);
+      assert.equal(await bal(freelancerToken), freelancerBefore);
       assert.equal(
         (await getMint(connection, mint)).supply.toString(),
         supplyBefore.toString()
       );
+      assert.equal(await balance(vaultOf(escrow)), "0");
+      const account = await program.account.escrow.fetch(escrow);
+      assert.deepEqual(account.state, { refunded: {} });
+      assert.equal(account.settleProposer, 0);
+    });
+
+    it("release from Frozen is the client conceding: the freelancer gets amount plus both bonds", async () => {
+      const escrow = await freeze(3600, AMOUNT, withBond);
+      await propose(escrow, 5000, client);
+      const clientBefore = await bal(clientToken);
+      const freelancerBefore = await bal(freelancerToken);
+      const supplyBefore = (await getMint(connection, mint)).supply;
+      await release(escrow);
+      assert.equal(
+        await bal(freelancerToken),
+        freelancerBefore + AMOUNT.toNumber() + 2 * BOND
+      );
+      assert.equal(await bal(clientToken), clientBefore);
+      assert.equal(
+        (await getMint(connection, mint)).supply.toString(),
+        supplyBefore.toString()
+      );
+      assert.equal(await balance(vaultOf(escrow)), "0");
+      const account = await program.account.escrow.fetch(escrow);
+      assert.deepEqual(account.state, { released: {} });
+      assert.equal(account.settleProposer, 0);
+      assert.equal(account.settleBps, 0);
+    });
+
+    it("only the right party can concede from Frozen", async () => {
+      const escrow = await freeze(3600, AMOUNT, withBond);
+      await expectError(release(escrow, freelancer), "Unauthorized");
+      await expectError(release(escrow, stranger), "Unauthorized");
+      await expectError(cancel(escrow, client), "Unauthorized");
+      await expectError(cancel(escrow, stranger), "Unauthorized");
+      assert.equal(await bal(vaultOf(escrow)), AMOUNT.toNumber() + 2 * BOND);
+      assert.deepEqual(await stateOf(escrow), { frozen: {} });
     });
 
     it("rejects a bond above 10000 bps", async () => {
@@ -1509,6 +1547,7 @@ describe("escrow", () => {
       const released = await only(await release(escrow), "Released");
       assert.isTrue(released.to.equals(freelancer.publicKey));
       assert.equal(released.amount.toNumber(), AMOUNT.toNumber() + bond);
+      assert.isFalse(released.conceded);
 
       const closed = await only(await closeEscrow(escrow), "Closed");
       assert.equal(closed.dustBurned.toNumber(), 0);
@@ -1528,6 +1567,16 @@ describe("escrow", () => {
       assert.equal(total, AMOUNT.toNumber() + 2 * ((AMOUNT.toNumber() * 1000) / 10000));
     });
 
+    it("marks a release from Frozen as conceded", async () => {
+      const escrow = await freeze(3600, AMOUNT, { bondBps: 1000 });
+      const released = await only(await release(escrow), "Released");
+      assert.isTrue(released.conceded);
+      assert.equal(
+        released.amount.toNumber(),
+        AMOUNT.toNumber() + 2 * ((AMOUNT.toNumber() * 1000) / 10000)
+      );
+    });
+
     it("emits Rejected, Cancelled and Burned", async () => {
       const bondBps = 1000;
       const bond = (AMOUNT.toNumber() * bondBps) / 10000;
@@ -1537,8 +1586,9 @@ describe("escrow", () => {
       assert.equal(rejected.clientBond.toNumber(), bond);
 
       const cancelled = await only(await cancel(escrow), "Cancelled");
-      assert.equal(cancelled.toFreelancer.toNumber(), bond);
-      assert.equal(cancelled.toClient.toNumber(), AMOUNT.toNumber() + bond);
+      // Cancelling from Frozen is the freelancer conceding: the client gets everything.
+      assert.equal(cancelled.toFreelancer.toNumber(), 0);
+      assert.equal(cancelled.toClient.toNumber(), AMOUNT.toNumber() + 2 * bond);
 
       const frozen = await freeze(4);
       await waitForDisputeEnd(frozen);
