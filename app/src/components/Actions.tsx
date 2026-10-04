@@ -6,6 +6,7 @@ import {
   Flag,
   HandCoins,
   Handshake,
+  Key,
   Lightning,
   Prohibit,
   Scales,
@@ -23,7 +24,9 @@ import {
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
 import { useEffect, useState } from "react";
+import { PL } from "../errors";
 import { fromBase } from "../format";
+import { bytesEqual, isZero, loadKey, parseKeyFile, sha256 } from "../seal";
 import { stateOf, useProgram, vaultOf } from "../program";
 import type { EscrowView } from "../pages/EscrowPage";
 import { useTx } from "../tx";
@@ -45,6 +48,9 @@ export function Actions({ pda, esc, now, role, reload, vaultBal }: EscrowView) {
   const [pending, setPending] = useState<Pending>(null);
   // Token balance of the connected wallet, to disable bond-paying buttons up front.
   const [tokenBal, setTokenBal] = useState<BN | null>(null);
+  // Sealed delivery: key uploaded from a .key file (the browser copy is read from localStorage).
+  const [uploadedKey, setUploadedKey] = useState<Uint8Array | null>(null);
+  const [keyErr, setKeyErr] = useState<string | null>(null);
 
   const mintKey = esc.mint;
   const stateKey = Object.keys(esc.state)[0];
@@ -90,6 +96,10 @@ export function Actions({ pda, esc, now, role, reload, vaultBal }: EscrowView) {
   const bondTxt = fromBase(bond);
   const lacksBond = tokenBal !== null && tokenBal.lt(bond);
   const lacksMsg = `Za mało tokenów na kaucję (${bondTxt})`;
+  const sealed = !isZero(esc.keyHash);
+  const approvedAt = esc.approvedAt.toNumber();
+  const reviewWin = esc.reviewWindowSecs.toNumber();
+  const storedKey = loadKey(pda.toBase58());
 
   // accept_job: the expected_* arguments are the terms that were DISPLAYED to the freelancer in
   // this render (`esc` below is the render-time snapshot), not a fresh read of the account right
@@ -112,7 +122,8 @@ export function Actions({ pda, esc, now, role, reload, vaultBal }: EscrowView) {
         .preInstructions([ensureAta(esc.client, clientToken)])
         .rpc()
     );
-  const release = (label = "Zatwierdzenie i wypłata (release)") =>
+  // For a sealed delivery `release` only approves (state Approved): the payout waits for the key.
+  const release = (label = sealed ? "Zatwierdzenie (release)" : "Zatwierdzenie i wypłata (release)") =>
     exec(label, () =>
       program.methods
         .release()
@@ -128,6 +139,38 @@ export function Actions({ pda, esc, now, role, reload, vaultBal }: EscrowView) {
         .claimIfSilent()
         .accountsPartial({ caller: publicKey, escrow: pda, mint, vault, freelancerToken, tokenProgram: TOKEN_PROGRAM_ID })
         .preInstructions([ensureAta(esc.freelancer, freelancerToken)])
+        .rpc()
+    );
+  // claim_with_key reveals the key and pays the freelancer in the same transaction. The key is checked
+  // locally against key_hash first, so a wrong file fails here with a clear message.
+  const claimWithKey = async () => {
+    setKeyErr(null);
+    let key: Uint8Array | null = null;
+    for (const c of [uploadedKey, storedKey]) {
+      if (c && bytesEqual(await sha256(c), esc.keyHash)) {
+        key = c;
+        break;
+      }
+    }
+    if (!key) {
+      setKeyErr(uploadedKey || storedKey ? PL.InvalidKey : "Brak klucza w tej przeglądarce: wgraj plik .key.");
+      return;
+    }
+    const k = key;
+    await exec("Ujawnienie klucza i wypłata (claim_with_key)", () =>
+      program.methods
+        .claimWithKey(Array.from(k))
+        .accountsPartial({ caller: publicKey, escrow: pda, mint, vault, freelancerToken, tokenProgram: TOKEN_PROGRAM_ID })
+        .preInstructions([ensureAta(esc.freelancer, freelancerToken)])
+        .rpc()
+    );
+  };
+  const refundUnrevealed = () =>
+    exec("Zwrot środków zleceniodawcy — klucz nie ujawniony (refund_unrevealed)", () =>
+      program.methods
+        .refundUnrevealed()
+        .accountsPartial({ caller: publicKey, escrow: pda, mint, vault, clientToken, tokenProgram: TOKEN_PROGRAM_ID })
+        .preInstructions([ensureAta(esc.client, clientToken)])
         .rpc()
     );
   const refund = () =>
@@ -219,9 +262,48 @@ export function Actions({ pda, esc, now, role, reload, vaultBal }: EscrowView) {
     if (isClient) items.push(<Act key="r" kind="primary" icon={SealCheck} label="Zapłać teraz" caption="release · podpisuje zleceniodawca" onClick={() => release("Wypłata dla zleceniobiorcy (release)")} />);
     if (isFreelancer && now <= deadline) items.push(<p key="m">Zgłoś dostawę w karcie Dostawa przed terminem.</p>);
   }
+  // Sealed delivery: the freelancer claims by revealing the key (browser copy or an uploaded .key).
+  const claimKeyItem = (
+    <div key="ck" className="act">
+      <Act kind="primary" icon={Key} label="Odbierz zapłatę (ujawnia klucz)" caption="claim_with_key · klucz staje się publiczny w transakcji" disabled={busy} onClick={claimWithKey} />
+      {storedKey ? (
+        <span className="muted">Klucz znaleziony w tej przeglądarce.</span>
+      ) : (
+        <label className="field">Brak klucza w przeglądarce — wgraj plik .key
+          <input
+            type="file"
+            onChange={async (e) => {
+              const input = e.target;
+              const f = input.files?.[0];
+              setKeyErr(null);
+              try {
+                const parsed = f ? parseKeyFile(new Uint8Array(await f.arrayBuffer())) : null;
+                if (f && !parsed) setKeyErr("To nie jest poprawny plik .key (oczekiwane 32 bajty).");
+                setUploadedKey(parsed);
+              } finally {
+                input.value = "";
+              }
+            }}
+          />
+        </label>
+      )}
+      {keyErr && <p className="error">{keyErr}</p>}
+    </div>
+  );
+
   // ---- Delivered: the client decides ----
   if (state === "delivered") {
-    if (isClient) items.push(<Act key="r" kind="primary" icon={SealCheck} label="Zatwierdź" caption="release · podpisuje zleceniodawca" onClick={() => release()} />);
+    if (isClient)
+      items.push(
+        <Act
+          key="r"
+          kind="primary"
+          icon={SealCheck}
+          label="Zatwierdź"
+          caption={sealed ? "release · Płacisz teraz. Plik odblokuje się, gdy zleceniobiorca ujawni klucz." : "release · podpisuje zleceniodawca"}
+          onClick={() => release()}
+        />
+      );
     if (isClient && now <= reviewEnd) {
       items.push(
         <Act key="rj" kind="danger" icon={Prohibit} label={`Odrzuć (wpłacasz kaucję ${bondTxt})`} caption="reject · podpisuje zleceniodawca" disabled={lacksBond} onClick={reject} />
@@ -229,18 +311,30 @@ export function Actions({ pda, esc, now, role, reload, vaultBal }: EscrowView) {
       if (lacksBond) items.push(<p key="rj-msg" className="error">{lacksMsg}</p>);
     }
     if (isFreelancer && now <= reviewEnd) items.push(<p key="m">Czekasz na decyzję zleceniodawcy do końca okna akceptacji.</p>);
+    if (isFreelancer && sealed && now > reviewEnd) items.push(claimKeyItem);
+  }
+  // ---- Approved (sealed only): the client approved, payout waits for the key ----
+  if (state === "approved") {
+    if (isFreelancer) items.push(claimKeyItem);
+    else items.push(<p key="m">Zatwierdzone. Zleceniobiorca dostanie zapłatę dopiero po ujawnieniu klucza.</p>);
   }
 
   // ---- Permissionless cranks: any connected wallet ----
   if ((state === "funded" || state === "accepted") && now > deadline)
     items.push(<Act key="rf" kind="primary" icon={ArrowCounterClockwise} label="Zwróć środki zleceniodawcy" caption="refund_if_late · może wywołać każdy — środki idą do zleceniodawcy" onClick={refund} />);
-  if (state === "delivered" && now > reviewEnd)
+  // claim_if_silent is for open deliveries only: silence alone never pays for sealed work.
+  if (state === "delivered" && !sealed && now > reviewEnd)
     items.push(<Act key="c" kind="primary" icon={Lightning} label="Wypłać zleceniobiorcy" caption="claim_if_silent · może wywołać każdy — środki idą do zleceniobiorcy" onClick={claim} />);
+  if (
+    sealed &&
+    ((state === "delivered" && now > reviewEnd + reviewWin) || (state === "approved" && now > approvedAt + reviewWin))
+  )
+    items.push(<Act key="ru" kind="primary" icon={ArrowCounterClockwise} label="Zwróć środki zleceniodawcy (klucz nie ujawniony)" caption="refund_unrevealed · może wywołać każdy — środki idą do zleceniodawcy" onClick={refundUnrevealed} />);
 
   // ---- Freelancer walking away (cancel_by_freelancer) ----
-  if (isFreelancer && (state === "funded" || state === "accepted" || state === "delivered")) {
+  if (isFreelancer && (state === "funded" || state === "accepted" || state === "delivered" || state === "approved")) {
     const abandoned = state === "accepted" && now > deadline;
-    const label = state === "funded" ? "Odrzuć zlecenie" : state === "delivered" ? "Zrezygnuj (odzyskujesz kaucję)" : "Zrezygnuj";
+    const label = state === "funded" ? "Odrzuć zlecenie" : state === "delivered" || state === "approved" ? "Zrezygnuj (odzyskujesz kaucję)" : "Zrezygnuj";
     const caption = abandoned
       ? "cancel_by_freelancer · po terminie kaucja przepada na rzecz zleceniodawcy"
       : "cancel_by_freelancer · podpisuje zleceniobiorca";
@@ -310,7 +404,7 @@ export function Actions({ pda, esc, now, role, reload, vaultBal }: EscrowView) {
         {/* Conceding is possible until the pool is burned, so it stays available after the window. */}
         {isClient &&
           (pending === "concedeClient" ? (
-            confirmPanel("cc", "Zleceniobiorca dostanie całą pulę (kwotę i obie kaucje). Tracisz swoją kaucję. Nieodwracalne.", "Potwierdzam ustąpienie", () => {
+            confirmPanel("cc", sealed ? "Zatwierdzasz wypłatę całej puli (kwota i obie kaucje); zleceniobiorca dostanie ją dopiero po ujawnieniu klucza. Tracisz swoją kaucję. Nieodwracalne." : "Zleceniobiorca dostanie całą pulę (kwotę i obie kaucje). Tracisz swoją kaucję. Nieodwracalne.", "Potwierdzam ustąpienie", () => {
               setPending(null);
               release("Ustąpienie zleceniodawcy (release)");
             })

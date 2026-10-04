@@ -16,6 +16,8 @@ function nextDeadline(e: EscrowAccount): number | null {
     case "funded":
     case "accepted":
       return e.deadlineTs.toNumber();
+    case "approved":
+      return e.approvedAt.toNumber() + e.reviewWindowSecs.toNumber();
     case "delivered":
       return e.deliveredAt ? e.deliveredAt.toNumber() + e.reviewWindowSecs.toNumber() : null;
     case "frozen":

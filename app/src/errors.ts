@@ -1,7 +1,7 @@
 import idl from "./idl/escrow.json";
 
 // Program error codes -> Polish messages.
-const PL: Record<string, string> = {
+export const PL: Record<string, string> = {
   InvalidAmount: "Kwota musi być większa od zera.",
   DeadlineInPast: "Termin jest w przeszłości.",
   InvalidState: "Umowa nie jest w stanie, który na to pozwala.",
@@ -24,6 +24,9 @@ const PL: Record<string, string> = {
   SameParty: "Zleceniodawca i zleceniobiorca muszą być różnymi portfelami.",
   WindowTooLong: "Termin i okna nie mogą być dłuższe niż 90 dni.",
   InvalidReviewWindow: "Okno akceptacji musi być większe od zera.",
+  InvalidKey: "Klucz nie pasuje do hasha zapisanego w umowie (InvalidKey).",
+  SealedDeliveryUseKey: "Dostawa jest zapieczętowana: odbierz zapłatę, ujawniając klucz.",
+  NotSealed: "To nie jest dostawa zapieczętowana.",
 };
 
 type AnyErr = {

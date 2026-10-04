@@ -9,6 +9,7 @@ import {
   Fire,
   Handshake,
   ListChecks,
+  LockKey,
   UserCheck,
   Scales,
   SealCheck,
@@ -28,9 +29,11 @@ import { Delivery } from "../components/Delivery";
 import { Card, CopyIcon, Hero, ShareLinkCard } from "../components/ui";
 import { txUrl } from "../config";
 import { countdown, fmtDate, fromBase, toHex } from "../format";
+import { isZero } from "../seal";
+import { useTx } from "../tx";
 import { stateOf, useChainNow, useProgram, vaultOf, type EscrowAccount, type StateName } from "../program";
 
-type HistItem = { sig: string; ok: boolean; time: number | null; ix: string; closes: boolean; conceded: boolean };
+type HistItem = { sig: string; ok: boolean; time: number | null; ix: string; closes: boolean; conceded: boolean; approved: boolean };
 
 // Friendlier names for instructions whose log name alone is unclear.
 const IX_LABELS: Record<string, string> = {
@@ -38,6 +41,8 @@ const IX_LABELS: Record<string, string> = {
   AcceptJob: "Akceptacja zlecenia (AcceptJob)",
   Withdraw: "Wycofanie środków (Withdraw)",
   Release: "Wypłata (Release)",
+  ClaimWithKey: "Ujawnienie klucza i wypłata (ClaimWithKey)",
+  RefundUnrevealed: "Zwrot — klucz nie ujawniony (RefundUnrevealed)",
 };
 
 export type EscrowView = {
@@ -49,11 +54,12 @@ export type EscrowView = {
   vaultBal: string | null;
 };
 
-const STATES: StateName[] = ["funded", "accepted", "delivered", "released", "refunded", "frozen", "settled", "burned"];
+const STATES: StateName[] = ["funded", "accepted", "delivered", "approved", "released", "refunded", "frozen", "settled", "burned"];
 export const STATE_PL: Record<StateName, string> = {
   funded: "Czeka na zleceniobiorcę",
   accepted: "Zaakceptowana",
   delivered: "Dostarczona",
+  approved: "Zatwierdzona — czeka na klucz",
   released: "Wypłacona",
   refunded: "Zwrócona",
   frozen: "Zamrożona",
@@ -64,6 +70,7 @@ export const STATE_ICON: Record<StateName, Icon> = {
   funded: Vault,
   accepted: UserCheck,
   delivered: UploadSimple,
+  approved: LockKey,
   released: SealCheck,
   refunded: ArrowsClockwise,
   frozen: Scales,
@@ -75,6 +82,7 @@ const BEFORE: Record<StateName, StateName[]> = {
   funded: [],
   accepted: ["funded"],
   delivered: ["funded", "accepted"],
+  approved: ["funded", "accepted", "delivered"],
   released: ["funded", "accepted", "delivered"],
   refunded: ["funded"],
   frozen: ["funded", "accepted", "delivered"],
@@ -89,7 +97,7 @@ function History({ items, onRefresh }: { items: HistItem[]; onRefresh: () => voi
         {items.map((h) => (
           <li key={h.sig}>
             <span className="muted">{h.time ? fmtDate(h.time) : "?"}</span>
-            <b>{h.conceded ? "Ustąpienie zleceniodawcy (Release)" : IX_LABELS[h.ix] ?? h.ix}{h.ok ? "" : " (błąd)"}</b>
+            <b>{h.approved ? "Zatwierdzenie — czeka na klucz (Release)" : h.conceded ? "Ustąpienie zleceniodawcy (Release)" : IX_LABELS[h.ix] ?? h.ix}{h.ok ? "" : " (błąd)"}</b>
             <a href={txUrl(h.sig)} target="_blank" rel="noreferrer">
               <span className="mono">{h.sig.slice(0, 12)}…</span>
               <ArrowSquareOut size={18} weight="duotone" />
@@ -157,9 +165,11 @@ export function EscrowPage({ address }: { address: string }) {
       const logs = txs[i]?.meta?.logMessages ?? [];
       // Released { conceded: true } = the client gave in from Frozen.
       let conceded = false;
+      let approved = false;
       try {
         for (const ev of parser.parseLogs(logs)) {
           if (ev.name === "released" && (ev.data as { conceded?: boolean }).conceded) conceded = true;
+          if (ev.name === "approved") approved = true;
         }
       } catch {
         /* events unreadable: plain label */
@@ -171,6 +181,7 @@ export function EscrowPage({ address }: { address: string }) {
         ix: logs.map((l) => l.match(/^Program log: Instruction: (\w+)/)?.[1]).find(Boolean) ?? "?",
         closes: !s.err && logs.some((l) => l.includes("Instruction: CloseEscrow")),
         conceded,
+        approved,
       };
     });
   }, [pda, connection, program]);
@@ -223,12 +234,27 @@ export function EscrowPage({ address }: { address: string }) {
     reload();
   }, [reload]);
 
-  // No polling once the account is closed: it cannot come back.
+  // No polling once the account is closed: it cannot come back. In Approved the page polls every
+  // 3 s, because the client is waiting for the freelancer to reveal the key.
+  const approvedNow = !!esc && stateOf(esc) === "approved";
   useEffect(() => {
     if (closed) return;
-    const t = setInterval(loadAccount, 10_000);
+    const t = setInterval(loadAccount, approvedNow ? 3_000 : 10_000);
     return () => clearInterval(t);
-  }, [loadAccount, closed]);
+  }, [loadAccount, closed, approvedNow]);
+
+  // Toast the moment the key shows up on chain while this page was waiting for it.
+  const { notify } = useTx();
+  const waitingForKey = !!esc && !isZero(esc.keyHash) && isZero(esc.revealedKey);
+  const revealedNow = !!esc && !isZero(esc.revealedKey);
+  const [wasWaiting, setWasWaiting] = useState(false);
+  useEffect(() => {
+    if (waitingForKey) setWasWaiting(true);
+    else if (wasWaiting && revealedNow) {
+      setWasWaiting(false);
+      notify({ ok: true, label: "Klucz ujawniony — praca odblokowana" });
+    }
+  }, [waitingForKey, revealedNow, wasWaiting, notify]);
 
   if (!pda) return <Hero overline="Umowa escrow">Nieprawidłowy adres umowy</Hero>;
   if (closed)
@@ -265,13 +291,16 @@ export function EscrowPage({ address }: { address: string }) {
   const disputeEnd = frozenAt > 0 ? frozenAt + esc.disputeWindowSecs.toNumber() : null;
   const hash = toHex(esc.deliverableHash);
   const hasHash = /[1-9a-f]/.test(hash);
+  const sealedOnChain = !isZero(esc.keyHash);
+  const revealed = !isZero(esc.revealedKey);
   const view: EscrowView = { pda, esc, now, role, reload, vaultBal };
 
   const lead = {
     funded: now <= deadline ? "Środki są w skarbcu. Czekamy, aż zleceniobiorca przyjmie zlecenie i wpłaci kaucję." : "Termin minął, a zlecenie nie zostało przyjęte. Każdy może zwrócić środki zleceniodawcy.",
     accepted: now <= deadline ? "Zleceniobiorca przyjął zlecenie i wpłacił kaucję. Czekamy na dostawę." : "Termin dostawy minął. Każdy może zwrócić środki zleceniodawcy razem z kaucją zleceniobiorcy.",
+    approved: "Zatwierdzone. Zleceniobiorca dostanie zapłatę dopiero po ujawnieniu klucza.",
     delivered: reviewEnd && now <= reviewEnd ? "Dostawa zgłoszona. Zleceniodawca ma czas na akceptację albo odrzucenie." : "Okno akceptacji minęło. Każdy może wypłacić środki zleceniobiorcy.",
-    released: "Wypłacono zleceniobiorcy. Umowa zakończona.",
+    released: sealedOnChain && revealed ? "Wypłacono zleceniobiorcy. Klucz ujawniony — praca odblokowana." : "Wypłacono zleceniobiorcy. Umowa zakończona.",
     refunded: "Środki wróciły do zleceniodawcy. Umowa zakończona.",
     frozen: disputeEnd && now > disputeEnd ? "Okno sporu minęło. Każdy może spalić środki." : "Dostawa odrzucona. Strony mogą się dogadać przed końcem okna sporu.",
     settled: "Strony dogadały się. Skarbiec został podzielony.",
@@ -282,13 +311,14 @@ export function EscrowPage({ address }: { address: string }) {
 
   const wasDelivered = !!esc.deliveredAt || state === "delivered";
   const done = (s: StateName) =>
-    BEFORE[state].includes(s) && ((s !== "delivered" && s !== "accepted") || wasDelivered);
+    (s === "approved" ? state === "released" && !esc.approvedAt.isZero() : BEFORE[state].includes(s)) && ((s !== "delivered" && s !== "accepted") || wasDelivered);
   // Who has already paid into the vault, derived from the state.
   const hasBond = !esc.bondAmount.isZero();
   const paid = {
     funded: "wpłacone: zleceniodawca (kwota)",
     accepted: `wpłacone: zleceniodawca (kwota)${hasBond ? " i zleceniobiorca (kaucja)" : ""}`,
     delivered: `wpłacone: zleceniodawca (kwota)${hasBond ? " i zleceniobiorca (kaucja)" : ""}`,
+    approved: `wpłacone: zleceniodawca (kwota)${hasBond ? " i zleceniobiorca (kaucja)" : ""}`,
     frozen: `wpłacone: zleceniodawca (kwota${hasBond ? " + kaucja" : ""})${hasBond ? " i zleceniobiorca (kaucja)" : ""}`,
     released: "rozliczone",
     refunded: "rozliczone",
@@ -344,6 +374,11 @@ export function EscrowPage({ address }: { address: string }) {
                 <span className="mono big-num">{vaultBal ?? "?"}</span>{" "}
                 <Addr value={vaultOf(esc.mint, pda).toBase58()} />
               </Def>
+              {hasHash && (
+                <Def icon={LockKey} label="Tryb dostawy">
+                  {sealedOnChain ? "zapieczętowana" : "jawna"}
+                </Def>
+              )}
               <Def icon={Fingerprint} label="Hash dostawy (SHA-256)">
                 {hasHash ? (
                   <span className="hash-line">
@@ -354,6 +389,14 @@ export function EscrowPage({ address }: { address: string }) {
                   <span className="muted">—</span>
                 )}
               </Def>
+              {revealed && (
+                <Def icon={LockKey} label="Ujawniony klucz">
+                  <span className="hash-line">
+                    <code className="hash" title={toHex(esc.revealedKey)}>{toHex(esc.revealedKey).slice(0, 8)}…{toHex(esc.revealedKey).slice(-8)}</code>
+                    <CopyIcon value={toHex(esc.revealedKey)} label="Kopiuj klucz" />
+                  </span>
+                </Def>
+              )}
               <Def label="Adres umowy"><Addr value={pda.toBase58()} /></Def>
             </dl>
           </Card>

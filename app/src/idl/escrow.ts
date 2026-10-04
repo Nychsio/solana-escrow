@@ -528,6 +528,110 @@ export type Escrow = {
       "args": []
     },
     {
+      "name": "claimWithKey",
+      "discriminator": [
+        82,
+        77,
+        109,
+        212,
+        218,
+        44,
+        185,
+        86
+      ],
+      "accounts": [
+        {
+          "name": "caller",
+          "signer": true
+        },
+        {
+          "name": "escrow",
+          "writable": true
+        },
+        {
+          "name": "mint",
+          "relations": [
+            "escrow"
+          ]
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "escrow"
+              },
+              {
+                "kind": "account",
+                "path": "tokenProgram"
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "freelancerToken",
+          "writable": true
+        },
+        {
+          "name": "tokenProgram"
+        }
+      ],
+      "args": [
+        {
+          "name": "key",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
       "name": "closeEscrow",
       "discriminator": [
         139,
@@ -816,6 +920,15 @@ export type Escrow = {
               32
             ]
           }
+        },
+        {
+          "name": "keyHash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
         }
       ]
     },
@@ -866,6 +979,100 @@ export type Escrow = {
           "docs": [
             "Anyone can trigger the refund; it can only go to the client's account."
           ],
+          "signer": true
+        },
+        {
+          "name": "escrow",
+          "writable": true
+        },
+        {
+          "name": "mint",
+          "relations": [
+            "escrow"
+          ]
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "escrow"
+              },
+              {
+                "kind": "account",
+                "path": "tokenProgram"
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "clientToken",
+          "writable": true
+        },
+        {
+          "name": "tokenProgram"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "refundUnrevealed",
+      "discriminator": [
+        251,
+        241,
+        202,
+        90,
+        170,
+        175,
+        49,
+        239
+      ],
+      "accounts": [
+        {
+          "name": "caller",
           "signer": true
         },
         {
@@ -1254,6 +1461,19 @@ export type Escrow = {
   ],
   "events": [
     {
+      "name": "approved",
+      "discriminator": [
+        17,
+        224,
+        150,
+        137,
+        174,
+        104,
+        7,
+        91
+      ]
+    },
+    {
       "name": "burned",
       "discriminator": [
         207,
@@ -1329,6 +1549,19 @@ export type Escrow = {
         195,
         251,
         114
+      ]
+    },
+    {
+      "name": "keyRevealed",
+      "discriminator": [
+        244,
+        165,
+        218,
+        72,
+        102,
+        23,
+        245,
+        234
       ]
     },
     {
@@ -1520,9 +1753,48 @@ export type Escrow = {
       "code": 6021,
       "name": "invalidReviewWindow",
       "msg": "Review window must be greater than zero"
+    },
+    {
+      "code": 6022,
+      "name": "invalidKey",
+      "msg": "The revealed key does not match the committed key hash"
+    },
+    {
+      "code": 6023,
+      "name": "sealedDeliveryUseKey",
+      "msg": "This delivery is sealed: claim it by revealing the key (claim_with_key)"
+    },
+    {
+      "code": 6024,
+      "name": "notSealed",
+      "msg": "This delivery is not sealed"
     }
   ],
   "types": [
+    {
+      "name": "approved",
+      "docs": [
+        "The client approved a sealed delivery (or conceded a dispute over one). No money",
+        "moved yet: the freelancer is paid in the transaction that reveals the key."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "escrow",
+            "type": "pubkey"
+          },
+          {
+            "name": "approvedAt",
+            "type": "i64"
+          },
+          {
+            "name": "conceded",
+            "type": "bool"
+          }
+        ]
+      }
+    },
     {
       "name": "burned",
       "type": {
@@ -1590,6 +1862,18 @@ export type Escrow = {
           },
           {
             "name": "deliverableHash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "keyHash",
+            "docs": [
+              "All zeros for an open delivery; otherwise the hash of the key that unlocks the work."
+            ],
             "type": {
               "array": [
                 "u8",
@@ -1698,6 +1982,38 @@ export type Escrow = {
             "type": "u64"
           },
           {
+            "name": "keyHash",
+            "docs": [
+              "Sealed delivery: sha256 of the key that decrypts the work (all zeros = open delivery).",
+              "`deliverable_hash` then commits to the ciphertext."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "revealedKey",
+            "docs": [
+              "The key, stored by claim_with_key in the transaction that pays the freelancer."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "approvedAt",
+            "docs": [
+              "When the client approved a sealed delivery (starts the key-reveal window)."
+            ],
+            "type": "i64"
+          },
+          {
             "name": "reserved",
             "docs": [
               "Unused space left from the original 64 reserved bytes. New fields must be carved",
@@ -1781,6 +2097,9 @@ export type Escrow = {
           },
           {
             "name": "accepted"
+          },
+          {
+            "name": "approved"
           }
         ]
       }
@@ -1801,6 +2120,30 @@ export type Escrow = {
           {
             "name": "bondAmount",
             "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "keyRevealed",
+      "docs": [
+        "The key to a sealed delivery, published in the same transaction that pays for it."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "escrow",
+            "type": "pubkey"
+          },
+          {
+            "name": "key",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
           }
         ]
       }

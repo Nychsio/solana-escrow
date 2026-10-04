@@ -522,6 +522,110 @@
       "args": []
     },
     {
+      "name": "claim_with_key",
+      "discriminator": [
+        82,
+        77,
+        109,
+        212,
+        218,
+        44,
+        185,
+        86
+      ],
+      "accounts": [
+        {
+          "name": "caller",
+          "signer": true
+        },
+        {
+          "name": "escrow",
+          "writable": true
+        },
+        {
+          "name": "mint",
+          "relations": [
+            "escrow"
+          ]
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "escrow"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "freelancer_token",
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "key",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
       "name": "close_escrow",
       "discriminator": [
         139,
@@ -810,6 +914,15 @@
               32
             ]
           }
+        },
+        {
+          "name": "key_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
         }
       ]
     },
@@ -860,6 +973,100 @@
           "docs": [
             "Anyone can trigger the refund; it can only go to the client's account."
           ],
+          "signer": true
+        },
+        {
+          "name": "escrow",
+          "writable": true
+        },
+        {
+          "name": "mint",
+          "relations": [
+            "escrow"
+          ]
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "escrow"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "client_token",
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "refund_unrevealed",
+      "discriminator": [
+        251,
+        241,
+        202,
+        90,
+        170,
+        175,
+        49,
+        239
+      ],
+      "accounts": [
+        {
+          "name": "caller",
           "signer": true
         },
         {
@@ -1248,6 +1455,19 @@
   ],
   "events": [
     {
+      "name": "Approved",
+      "discriminator": [
+        17,
+        224,
+        150,
+        137,
+        174,
+        104,
+        7,
+        91
+      ]
+    },
+    {
       "name": "Burned",
       "discriminator": [
         207,
@@ -1323,6 +1543,19 @@
         195,
         251,
         114
+      ]
+    },
+    {
+      "name": "KeyRevealed",
+      "discriminator": [
+        244,
+        165,
+        218,
+        72,
+        102,
+        23,
+        245,
+        234
       ]
     },
     {
@@ -1514,9 +1747,48 @@
       "code": 6021,
       "name": "InvalidReviewWindow",
       "msg": "Review window must be greater than zero"
+    },
+    {
+      "code": 6022,
+      "name": "InvalidKey",
+      "msg": "The revealed key does not match the committed key hash"
+    },
+    {
+      "code": 6023,
+      "name": "SealedDeliveryUseKey",
+      "msg": "This delivery is sealed: claim it by revealing the key (claim_with_key)"
+    },
+    {
+      "code": 6024,
+      "name": "NotSealed",
+      "msg": "This delivery is not sealed"
     }
   ],
   "types": [
+    {
+      "name": "Approved",
+      "docs": [
+        "The client approved a sealed delivery (or conceded a dispute over one). No money",
+        "moved yet: the freelancer is paid in the transaction that reveals the key."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "escrow",
+            "type": "pubkey"
+          },
+          {
+            "name": "approved_at",
+            "type": "i64"
+          },
+          {
+            "name": "conceded",
+            "type": "bool"
+          }
+        ]
+      }
+    },
     {
       "name": "Burned",
       "type": {
@@ -1584,6 +1856,18 @@
           },
           {
             "name": "deliverable_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "key_hash",
+            "docs": [
+              "All zeros for an open delivery; otherwise the hash of the key that unlocks the work."
+            ],
             "type": {
               "array": [
                 "u8",
@@ -1692,6 +1976,38 @@
             "type": "u64"
           },
           {
+            "name": "key_hash",
+            "docs": [
+              "Sealed delivery: sha256 of the key that decrypts the work (all zeros = open delivery).",
+              "`deliverable_hash` then commits to the ciphertext."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "revealed_key",
+            "docs": [
+              "The key, stored by claim_with_key in the transaction that pays the freelancer."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "approved_at",
+            "docs": [
+              "When the client approved a sealed delivery (starts the key-reveal window)."
+            ],
+            "type": "i64"
+          },
+          {
             "name": "_reserved",
             "docs": [
               "Unused space left from the original 64 reserved bytes. New fields must be carved",
@@ -1775,6 +2091,9 @@
           },
           {
             "name": "Accepted"
+          },
+          {
+            "name": "Approved"
           }
         ]
       }
@@ -1795,6 +2114,30 @@
           {
             "name": "bond_amount",
             "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "KeyRevealed",
+      "docs": [
+        "The key to a sealed delivery, published in the same transaction that pays for it."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "escrow",
+            "type": "pubkey"
+          },
+          {
+            "name": "key",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
           }
         ]
       }
