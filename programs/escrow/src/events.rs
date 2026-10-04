@@ -35,13 +35,6 @@ pub struct Delivered {
     pub deliverable_hash: [u8; 32],
 }
 
-#[event]
-pub struct RevisionRequested {
-    pub escrow: Pubkey,
-    pub revisions_used: u8,
-    pub new_deadline_ts: i64,
-}
-
 /// Emitted by `release` and by `claim_if_silent`.
 #[event]
 pub struct Released {

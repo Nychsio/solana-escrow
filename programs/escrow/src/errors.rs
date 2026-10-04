@@ -38,8 +38,4 @@ pub enum ErrorCode {
     VaultNotEmpty,
     #[msg("This mint is not supported (Token-2022 extension outside the allow-list)")]
     UnsupportedMint,
-    #[msg("Invalid revision settings (at most 10 revisions, and a window when revisions are allowed)")]
-    InvalidRevisionConfig,
-    #[msg("No revisions left")]
-    NoRevisionsLeft,
 }

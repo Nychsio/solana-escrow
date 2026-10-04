@@ -95,9 +95,7 @@ describe("escrow", () => {
     deadlineTs: number,
     reviewWindowSecs: number,
     disputeWindowSecs = 3600,
-    bondBps = 0,
-    maxRevisions = 0,
-    revisionWindowSecs = 60
+    bondBps = 0
   ) => {
     const escrow = escrowPda(id);
     return program.methods
@@ -107,9 +105,7 @@ describe("escrow", () => {
         new BN(deadlineTs),
         new BN(reviewWindowSecs),
         new BN(disputeWindowSecs),
-        bondBps,
-        maxRevisions,
-        new BN(revisionWindowSecs)
+        bondBps
       )
       .accountsPartial({
         client: client.publicKey,
@@ -134,8 +130,6 @@ describe("escrow", () => {
     opts: {
       accept?: boolean;
       bondBps?: number;
-      maxRevisions?: number;
-      revisionWindowSecs?: number;
     } = {}
   ) => {
     const id = new BN(nextId++);
@@ -146,9 +140,7 @@ describe("escrow", () => {
       deadlineTs,
       reviewWindowSecs,
       disputeWindowSecs,
-      opts.bondBps ?? 0,
-      opts.maxRevisions ?? 0,
-      opts.revisionWindowSecs ?? 60
+      opts.bondBps ?? 0
     );
     const escrow = escrowPda(id);
     if (opts.accept !== false) await acceptJob(escrow);
@@ -170,13 +162,6 @@ describe("escrow", () => {
         freelancerToken: source,
         tokenProgram: TOKEN_PROGRAM_ID,
       })
-      .signers([signer])
-      .rpc();
-
-  const requestRevision = (escrow: PublicKey, signer = client) =>
-    program.methods
-      .requestRevision()
-      .accountsPartial({ client: signer.publicKey, escrow })
       .signers([signer])
       .rpc();
 
@@ -483,9 +468,7 @@ describe("escrow", () => {
       assert.equal(account.settleProposer, 0);
       assert.equal(account.settleBps, 0);
       assert.equal(account.bondAmount.toString(), "0");
-      assert.equal(account.maxRevisions, 0);
-      assert.equal(account.revisionsUsed, 0);
-      assert.deepEqual(account.reserved, new Array(27).fill(0));
+      assert.deepEqual(account.reserved, new Array(37).fill(0));
       // 8-byte discriminator + 235 bytes: the layout size must never change.
       const info = await connection.getAccountInfo(escrow);
       assert.equal(info!.data.length, 8 + 235);
@@ -1015,9 +998,7 @@ describe("escrow", () => {
           new BN(deadlineTs),
           new BN(3600),
           new BN(3600),
-          0,
-          0,
-          new BN(0)
+          0
         )
         .accountsPartial({
           client: client.publicKey,
@@ -1197,7 +1178,7 @@ describe("escrow", () => {
       const escrow = escrowPda(id);
       const deadlineTs = (await chainNow()) + LONG;
       await program.methods
-        .create(id, AMOUNT, new BN(deadlineTs), new BN(3600), new BN(3600), BOND_BPS, 0, new BN(60))
+        .create(id, AMOUNT, new BN(deadlineTs), new BN(3600), new BN(3600), BOND_BPS)
         .accountsPartial({
           client: client.publicKey,
           freelancer: broke.publicKey,
@@ -1395,75 +1376,6 @@ describe("escrow", () => {
         "ConstraintTokenOwner"
       );
       assert.equal(await balance(vaultOf(escrow)), AMOUNT.toString());
-    });
-  });
-
-  describe("revisions", () => {
-    it("sends the job back to Accepted with a later deadline, until the limit is used up", async () => {
-      const { escrow, deadlineTs } = await open(LONG, 3600, 3600, AMOUNT, {
-        maxRevisions: 1,
-        revisionWindowSecs: LONG * 2,
-      });
-      await markDelivered(escrow);
-
-      await requestRevision(escrow);
-      const account = await program.account.escrow.fetch(escrow);
-      assert.deepEqual(account.state, { accepted: {} });
-      assert.isNull(account.deliveredAt);
-      assert.equal(account.revisionsUsed, 1);
-      // The deadline only ever moves out.
-      assert.isAbove(account.deadlineTs.toNumber(), deadlineTs);
-      assert.isAtLeast(
-        account.deadlineTs.toNumber(),
-        (await chainNow()) + LONG * 2 - 60
-      );
-
-      // The freelancer delivers again; no revisions are left for a second request.
-      await markDelivered(escrow);
-      await expectError(requestRevision(escrow), "NoRevisionsLeft");
-      assert.deepEqual(await stateOf(escrow), { delivered: {} });
-
-      await expectPayout(escrow, freelancerToken, () => release(escrow));
-    });
-
-    it("is refused when the escrow allows no revisions", async () => {
-      const { escrow } = await open(LONG, 3600);
-      await markDelivered(escrow);
-      await expectError(requestRevision(escrow), "NoRevisionsLeft");
-    });
-
-    it("is refused after the review window", async () => {
-      const { escrow } = await open(LONG, 3, 3600, AMOUNT, {
-        maxRevisions: 2,
-        revisionWindowSecs: 60,
-      });
-      await markDelivered(escrow);
-      const account = await program.account.escrow.fetch(escrow);
-      await waitUntilAfter((account.deliveredAt as BN).toNumber() + 3);
-      await expectError(requestRevision(escrow), "ReviewWindowClosed");
-    });
-
-    it("is client-only and needs a delivery", async () => {
-      const { escrow } = await open(LONG, 3600, 3600, AMOUNT, {
-        maxRevisions: 1,
-        revisionWindowSecs: 60,
-      });
-      await expectError(requestRevision(escrow), "InvalidState");
-      await markDelivered(escrow);
-      await expectError(requestRevision(escrow, freelancer), "Unauthorized");
-      await expectError(requestRevision(escrow, stranger), "Unauthorized");
-    });
-
-    it("validates the revision settings in create", async () => {
-      const deadlineTs = (await chainNow()) + LONG;
-      await expectError(
-        create(new BN(nextId++), AMOUNT, deadlineTs, 3600, 3600, 0, 11, 60),
-        "InvalidRevisionConfig"
-      );
-      await expectError(
-        create(new BN(nextId++), AMOUNT, deadlineTs, 3600, 3600, 0, 1, 0),
-        "InvalidRevisionConfig"
-      );
     });
   });
 

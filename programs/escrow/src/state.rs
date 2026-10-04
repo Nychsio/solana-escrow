@@ -30,17 +30,13 @@ pub struct Escrow {
     /// Spare space (carved out of the original 64 bytes) so the account size never changes.
     /// Each side's deposit (the freelancer's at accept_job, the client's at reject).
     pub bond_amount: u64,
-    pub max_revisions: u8,
-    pub revisions_used: u8,
-    pub revision_window_secs: u64,
-    pub _reserved: [u8; 27],
+    pub _reserved: [u8; 37],
 }
 
 /// The account size shipped with the first dispute-ready layout; new fields must come out of `_reserved`.
 const _: () = assert!(Escrow::INIT_SPACE == 235);
 
 pub const MAX_BPS: u16 = 10_000;
-pub const MAX_REVISIONS: u8 = 10;
 pub const SETTLE_NONE: u8 = 0;
 pub const SETTLE_CLIENT: u8 = 1;
 pub const SETTLE_FREELANCER: u8 = 2;

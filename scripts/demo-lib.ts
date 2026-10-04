@@ -82,8 +82,6 @@ export const createCall = (
     review: number;
     dispute: number;
     bondBps?: number;
-    maxRevisions?: number;
-    revisionWindow?: number;
   }
 ) =>
   ctx.program.methods
@@ -93,9 +91,7 @@ export const createCall = (
       new BN(o.deadlineTs),
       new BN(o.review),
       new BN(o.dispute),
-      o.bondBps ?? BOND_BPS,
-      o.maxRevisions ?? 0,
-      new BN(o.revisionWindow ?? 0)
+      o.bondBps ?? BOND_BPS
     )
     .accountsPartial({
       client: ctx.client.publicKey,

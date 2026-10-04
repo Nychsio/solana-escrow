@@ -34,13 +34,6 @@ pub struct MarkDelivered<'info> {
 }
 
 #[derive(Accounts)]
-pub struct RequestRevision<'info> {
-    pub client: Signer<'info>,
-    #[account(mut, has_one = client @ ErrorCode::Unauthorized)]
-    pub escrow: Account<'info, Escrow>,
-}
-
-#[derive(Accounts)]
 pub struct Reject<'info> {
     pub client: Signer<'info>,
     #[account(mut, has_one = client @ ErrorCode::Unauthorized, has_one = mint)]
@@ -135,32 +128,6 @@ pub fn reject(ctx: Context<Reject>) -> Result<()> {
         escrow: ctx.accounts.escrow.key(),
         client_bond: bond,
         frozen_at: now,
-    });
-    Ok(())
-}
-
-/// Client asks for changes instead of accepting or rejecting: the job goes back to
-/// Accepted and the deadline moves out so the freelancer can deliver again. Each
-/// escrow allows a fixed number of rounds (`max_revisions`), so it cannot loop forever.
-pub fn request_revision(ctx: Context<RequestRevision>) -> Result<()> {
-    let escrow = &mut ctx.accounts.escrow;
-    escrow.require_state(&[EscrowState::Delivered])?;
-    let now = Clock::get()?.unix_timestamp;
-    require!(now <= escrow.review_ends_at()?, ErrorCode::ReviewWindowClosed);
-    require!(
-        escrow.revisions_used < escrow.max_revisions,
-        ErrorCode::NoRevisionsLeft
-    );
-
-    let window = i64::try_from(escrow.revision_window_secs).unwrap_or(i64::MAX);
-    escrow.revisions_used += 1;
-    escrow.delivered_at = None;
-    escrow.deadline_ts = escrow.deadline_ts.max(now.saturating_add(window));
-    escrow.state = EscrowState::Accepted;
-    emit!(RevisionRequested {
-        escrow: ctx.accounts.escrow.key(),
-        revisions_used: ctx.accounts.escrow.revisions_used,
-        new_deadline_ts: ctx.accounts.escrow.deadline_ts,
     });
     Ok(())
 }

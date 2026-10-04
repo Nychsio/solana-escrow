@@ -21,8 +21,6 @@ pub mod escrow {
         review_window_secs: u64,
         dispute_window_secs: u64,
         bond_bps: u16,
-        max_revisions: u8,
-        revision_window_secs: u64,
     ) -> Result<()> {
         instructions::create::create(
             ctx,
@@ -32,17 +30,11 @@ pub mod escrow {
             review_window_secs,
             dispute_window_secs,
             bond_bps,
-            max_revisions,
-            revision_window_secs,
         )
     }
 
     pub fn accept_job(ctx: Context<AcceptJob>) -> Result<()> {
         instructions::delivery::accept_job(ctx)
-    }
-
-    pub fn request_revision(ctx: Context<RequestRevision>) -> Result<()> {
-        instructions::delivery::request_revision(ctx)
     }
 
     pub fn withdraw(ctx: Context<Withdraw>) -> Result<()> {
