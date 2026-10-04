@@ -11,7 +11,8 @@
     "app:build": "yarn --cwd app build",
     "demo:dispute": "ts-node -P scripts/tsconfig.json scripts/demo-dispute.ts",
     "demo:cancel": "ts-node -P scripts/tsconfig.json scripts/demo-cancel.ts",
-    "demo:ghost": "ts-node -P scripts/tsconfig.json scripts/demo-ghost.ts"
+    "demo:ghost": "ts-node -P scripts/tsconfig.json scripts/demo-ghost.ts",
+    "demo:sealed": "ts-node -P scripts/tsconfig.json scripts/demo-sealed.ts"
   },
   "dependencies": {
     "@anchor-lang/core": "1.1.2"

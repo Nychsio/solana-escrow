@@ -122,9 +122,15 @@ export const acceptJobCall = async (ctx: Ctx, e: Esc) => {
     .rpc();
 };
 
+// Open delivery: key_hash of zeros, the work is visible to the client.
 export const deliverCall = (ctx: Ctx, e: Esc, text = "demo deliverable") =>
+  deliverRaw(ctx, e, Array.from(createHash("sha256").update(text).digest()), new Array(32).fill(0));
+
+// `deliverableHash` is the hash of what the client sees (the ciphertext for a sealed
+// delivery); a non-zero `keyHash` seals the delivery.
+export const deliverRaw = (ctx: Ctx, e: Esc, deliverableHash: number[], keyHash: number[]) =>
   ctx.program.methods
-    .markDelivered(Array.from(createHash("sha256").update(text).digest()))
+    .markDelivered(deliverableHash, keyHash)
     .accountsPartial({ freelancer: ctx.freelancer.publicKey, escrow: e.escrow })
     .signers([ctx.freelancer])
     .rpc();

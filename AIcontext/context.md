@@ -23,6 +23,15 @@
 ## Blokery
 - Brak.
 
+## Zadanie 11: zapieczętowana dostawa, v2.2 (2026-10-04)
+- Program (commit `7745c0d`): `mark_delivered(deliverable_hash, key_hash)`, `release` na zapieczętowanej tylko zatwierdza (stan `Approved`), nowe `claim_with_key(key)` i `refund_unrevealed`, `claim_if_silent` odrzuca zapieczętowaną (`SealedDeliveryUseKey`), `cancel_by_freelancer` przyjmuje `Approved`. Nowe błędy `InvalidKey`, `SealedDeliveryUseKey`, `NotSealed`; nowe zdarzenia `Approved`, `KeyRevealed` (i `key_hash` w `Delivered`). Konto 307 B (było 235 B). `anchor test`: 86 zielonych.
+- Przed upgrade'em zamknięto 5 otwartych kont `Escrow` na devnecie (wszystkie na portfelach demo `djfY…`/`62Rw…`; 4 końcowe i jedno `Frozen` z 10 testowymi tokenami, zamknięte przez `cancel_by_freelancer`, tokeny wróciły do klienta demo), skrypt `scripts/close-open-escrows.ts`. Na devnecie 0 kont `Escrow` przed upgrade'em.
+- Devnet = v2.2 (kod z `7745c0d`): slot upgrade'u 507197869, authority bez zmian (NIE odebrane), konto programu 382 280 B (extend o 10 240 B), pierwsze 376 400 B zrzutu = `target/deploy/escrow.so`, reszta zera, brak osieroconych buforów, IDL w metadanych zaktualizowane.
+- **Incydent przy upgrade'ie:** mój `extend` o 6 408 B został odrzucony (loader wymaga co najmniej 10 240 B), a `anchor deploy` zdążył zapisać bufor `H5Mpkj…` (1,913 SOL) i padł na auto-extend; program na devnecie pozostał nietknięty. Zawartość bufora zweryfikowałem `cmp` z `.so`, zrobiłem `extend` o 10 240 B i upgrade z bufora (`solana program upgrade`), co zwróciło 1,9 SOL.
+- Saldo portfela dev: **przed 2,518892 SOL**, po nieudanym deployu (bufor) 0,603991, po `extend` 0,551967, po upgrade'ie z bufora 2,464912, po `anchor idl upgrade` 2,461092, po demo 2.461092469 SOL (koszt netto upgrade'u ok. 0,058 SOL: rent rozszerzenia 0,052 plus opłaty).
+- Demo v2.2 na devnecie, 28 transakcji `finalized` (linki w README): `demo:sealed` (nowe: AES-256-GCM, klucz czytany z konta, odszyfrowanie identyczne z oryginałem), `demo:flow`, `demo:dispute`, `demo:cancel`, `demo:ghost`.
+- **FRONT NADAL NA STAREJ WERSJI** IDL: nowe argumenty `mark_delivered`, nowe instrukcje `claim_with_key` i `refund_unrevealed`, nowy stan `Approved`, nowe pola konta, więc transakcje frontu na devnecie są odrzucane. Pełna lista różnic w wiadomości "IDL gotowy".
+
 ## Zadanie 10: escrow v2.1, łatki po audycie (2026-10-04)
 - Commity (każdy z zielonym `anchor test`): 1 `7bcafcf` (usunięte rewizje), 2 `b4af9c1` (`accept_job` wiąże warunki, `TermsMismatch`), 3 `af91d94` (porzucenie po terminie traci kaucję), 4 `99c8a07` (`release` z `Frozen` = ustąpienie klienta, `cancel_by_freelancer` z `Frozen` = ustąpienie wykonawcy, `Released.conceded`), 5 `0bcffd8` (limity w `create`: `SameParty`, `WindowTooLong`, `InvalidReviewWindow`), 6 `b0bd804` (komentarze, main.md, README). `anchor test`: 75 zielonych.
 - Devnet = v2.1 (kod z `b0bd804`): upgrade w slocie 507185326, **bez `extend`** (nowy `.so` 364 816 B mieści się w koncie 372 040 B), authority bez zmian (NIE odebrane), brak osieroconych buforów. Pierwsze 364 816 B zrzutu = `target/deploy/escrow.so`, reszta zera.

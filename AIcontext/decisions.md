@@ -71,6 +71,14 @@ Format: `data | decyzja | dlaczego | kto`
 2026-10-04 | v2.1: limity w create: freelancer != client (SameParty), review_window_secs > 0 (InvalidReviewWindow), termin i okna <= 90 dni (WindowTooLong) | absurdalne wartości (okna u64::MAX, termin za dekady) w umowie, którą ktoś ma zaakceptować; InvalidReviewWindow dodany przeze mnie, bo zadanie nie wskazało kodu błędu dla review_window_secs = 0 | Piotr / Claude Code
 2026-10-04 | v2.1: odpowiedź dla jury o sporze bez obietnicy, że "nikt nie zyskuje": program nie wie, kto ma rację, ogranicza zysk kłamcy, każe płacić za zwłokę i daje wyjścia (ustąpić, dogadać się, spalić) | uczciwsze i obronne przed pytaniem o złośliwego klienta | Piotr
 2026-10-04 | v2.1: upgrade devnet bez extend (364 816 B < 372 040 B konta), przez Helius RPC z app/.env (zmienna środowiskowa, bez zapisu i wypisywania klucza) | publiczny RPC bywa dławiony (429) | Piotr / Claude Code
+2026-10-04 | Zapieczętowana dostawa: key_hash w mark_delivered, release na zapieczętowanej tylko zatwierdza (Approved), claim_with_key wypłaca wyłącznie za kluczem (sha256), refund_unrevealed zwraca klientowi całość z kaucją wykonawcy | atomowa wymiana pieniędzy na klucz do pracy; inspiracja ERC-7573 (https://eips.ethereum.org/EIPS/eip-7573) | Piotr
+2026-10-04 | Granica fair exchange: bez zaufanej trzeciej strony sprawiedliwa wymiana jest niemożliwa (Pagnia i Gärtner 1999), więc program ogranicza ryzyko, nie eliminuje go; tryb (jawny/zapieczętowany) wybiera wykonawca i jest zapisany on-chain | jawne ryzyko: jawna = złośliwe odrzucenie, zapieczętowana = zła treść pod kluczem po stronie klienta | Piotr
+2026-10-04 | Ugoda na zapieczętowanej dostawie NIE przekazuje klucza | ugoda = rozstanie bez pracy, chyba że wykonawca prześle klucz dobrowolnie; program nie ma jak wymusić klucza bez płatności | Piotr
+2026-10-04 | Konto Escrow rośnie o 72 B (key_hash, revealed_key, approved_at): INIT_SPACE 235 -> 307, _reserved bez zmian, nowy stan Approved dopisany na końcu enuma | stare konta stają się nieczytelne, więc przed upgrade'em zamknięto wszystkie otwarte konta demo (scripts/close-open-escrows.ts; wszystkie na portfelach demo) | Piotr
+2026-10-04 | Nowa zależność programu: solana-sha256-hasher =3.1.0 (hash/sha256 na łańcuchu przez syscall) | anchor-lang 1.1.2 nie re-eksportuje solana_program::hash (brak umbrella crate w Solanie 3.x); crate był już tranzytywnie w Cargo.lock | Claude Code
+2026-10-04 | Dodany błąd NotSealed (claim_with_key i refund_unrevealed na dostawie jawnej); tu i w refund_unrevealed "za wcześnie" zwraca istniejące ReviewWindowOpen | zadanie podało tylko InvalidKey i SealedDeliveryUseKey; unikam dalszych nowych błędów | Claude Code
+2026-10-04 | Okno na ujawnienie klucza = review_window_secs (z Approved od approved_at, z Delivered po końcu okna akceptacji) | brak osobnego parametru: bez zmiany create i bez nowych pól | Piotr
+2026-10-04 | Upgrade devnet v2.2: extend o 10 240 B (minimum wymagane przez loader, moja próba 6 408 B została odrzucona), upgrade z bufora po weryfikacji jego zawartości (cmp z .so), potem anchor idl upgrade | .so urósł do 376 400 B; pierwsze podejście anchor deploy zapisało bufor i padło na auto-extend | Piotr / Claude Code
 
 ## Użyte komponenty zewnętrzne (disclosure)
 - Solana (devnet), Solana CLI
@@ -85,3 +93,4 @@ Format: `data | decyzja | dlaczego | kto`
 - Frontend: @phosphor-icons/react, simple-icons, @fontsource/{league-spartan,inter,jetbrains-mono}, Vite, React, TypeScript, @vitejs/plugin-react, @solana/wallet-adapter-base / -react / -react-ui, buffer, Web Crypto API (SHA-256), Phantom (portfel do demo)
 - Playwright + Chromium (lokalny test UI z atrapą RPC, poza repo)
 - Helius (RPC devnet, free tier; wymienny przez VITE_RPC_URL)
+- solana-sha256-hasher (SHA-256 w programie, sprawdzanie klucza), AES-256-GCM z node:crypto (szyfrowanie w demo-sealed.ts), ERC-7573 (inspiracja), Pagnia i Gärtner 1999 (granica fair exchange)
