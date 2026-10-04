@@ -82,6 +82,9 @@ export const createCall = (
     review: number;
     dispute: number;
     bondBps?: number;
+    // Early-payment discount offered to the client (basis points of the amount) and the window for it.
+    earlyDiscountBps?: number;
+    earlyWindow?: number;
   }
 ) =>
   ctx.program.methods
@@ -91,7 +94,9 @@ export const createCall = (
       new BN(o.deadlineTs),
       new BN(o.review),
       new BN(o.dispute),
-      o.bondBps ?? BOND_BPS
+      o.bondBps ?? BOND_BPS,
+      o.earlyDiscountBps ?? 0,
+      new BN(o.earlyWindow ?? 0)
     )
     .accountsPartial({
       client: ctx.client.publicKey,
@@ -109,7 +114,15 @@ export const createCall = (
 export const acceptJobCall = async (ctx: Ctx, e: Esc) => {
   const a = await ctx.program.account.escrow.fetch(e.escrow);
   return ctx.program.methods
-    .acceptJob(a.amount, a.bondAmount, a.deadlineTs, a.reviewWindowSecs, a.disputeWindowSecs)
+    .acceptJob(
+      a.amount,
+      a.bondAmount,
+      a.deadlineTs,
+      a.reviewWindowSecs,
+      a.disputeWindowSecs,
+      a.earlyDiscountBps,
+      a.earlyWindowSecs
+    )
     .accountsPartial({
       freelancer: ctx.freelancer.publicKey,
       escrow: e.escrow,
@@ -144,6 +157,7 @@ export const releaseCall = (ctx: Ctx, e: Esc) =>
       mint: ctx.mint,
       vault: e.vault,
       freelancerToken: ctx.freelancerToken,
+      clientToken: ctx.clientToken,
       tokenProgram: TOKEN_PROGRAM_ID,
     })
     .signers([ctx.client])

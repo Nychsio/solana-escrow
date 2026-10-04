@@ -23,6 +23,13 @@
 ## Blokery
 - Brak.
 
+## Zadanie 12: skonto, v2.3 (2026-10-04)
+- Program (commit `559271e`): `early_discount_bps`/`early_window_secs` w koncie (z `_reserved`, rozmiar 307 B bez zmian), nowe argumenty `create` (na końcu) i `accept_job` (`expected_early_*`), skonto liczone tylko od `amount`, wypłacane klientowi w `release` (dostawa jawna w oknie) lub w `claim_with_key` (zapieczętowana, z `approved_at` vs `delivered_at`); nowe konto `client_token` w obu; nowy błąd `InvalidDiscount`; zdarzenia: `Released.discount`, `KeyRevealed.discount`, `Approved.early`. `anchor test`: 95 zielonych (86 + 9 nowych).
+- Devnet = v2.3 (kod z `559271e`): slot upgrade'u 507203791, authority bez zmian (NIE odebrane), konto programu 396 792 B (jawny `extend` o 14 512 B przed deployem), pierwsze 394 744 B zrzutu = `target/deploy/escrow.so`, reszta zera, brak osieroconych buforów. Upgrade przeszedł za pierwszym podejściem.
+- Saldo portfela dev: **przed 2,461092 SOL**, po `extend` 2,387367, po upgrade'ie 2,383071 (koszt netto ok. 0,078 SOL: rent rozszerzenia 0,074 plus opłaty, bufor zwrócony), po demo 2.383046376 SOL.
+- Demo v2.3 na devnecie, 30 transakcji `finalized` (linki w README): nowe `demo:early` (skonto 2% = 2 tokeny ze 100, wykonawca netto 98) i `demo:sealed` w formacie `.sealed` z aplikacji webowej (hash całego pliku zgodny z `deliverable_hash`), oraz `demo:flow`, `demo:dispute`, `demo:cancel`, `demo:ghost`. Pierwsze uruchomienie czterech ostatnich padło na `insufficient funds` w `create`: klient demo wyczerpał testowe tokeny (nie błąd programu); `yarn demo:setup` dobija je do 1000.
+- **FRONT NADAL NA STAREJ WERSJI** IDL (v2.2): nowe argumenty `create` i `accept_job`, nowe konto `client_token` w `release` i `claim_with_key`, nowe pola konta i eventów. Pełna lista różnic w wiadomości "IDL gotowy".
+
 ## Zadanie 11: zapieczętowana dostawa, v2.2 (2026-10-04)
 - Program (commit `7745c0d`): `mark_delivered(deliverable_hash, key_hash)`, `release` na zapieczętowanej tylko zatwierdza (stan `Approved`), nowe `claim_with_key(key)` i `refund_unrevealed`, `claim_if_silent` odrzuca zapieczętowaną (`SealedDeliveryUseKey`), `cancel_by_freelancer` przyjmuje `Approved`. Nowe błędy `InvalidKey`, `SealedDeliveryUseKey`, `NotSealed`; nowe zdarzenia `Approved`, `KeyRevealed` (i `key_hash` w `Delivered`). Konto 307 B (było 235 B). `anchor test`: 86 zielonych.
 - Przed upgrade'em zamknięto 5 otwartych kont `Escrow` na devnecie (wszystkie na portfelach demo `djfY…`/`62Rw…`; 4 końcowe i jedno `Frozen` z 10 testowymi tokenami, zamknięte przez `cancel_by_freelancer`, tokeny wróciły do klienta demo), skrypt `scripts/close-open-escrows.ts`. Na devnecie 0 kont `Escrow` przed upgrade'em.
