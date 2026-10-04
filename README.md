@@ -6,20 +6,36 @@ Escrow dla zleceń freelancerskich **bez arbitra**, na Solanie (Anchor). Warunki
 
 Zaimplementowana pełna logika escrow v2.1 (instrukcje: `create`, `accept_job`, `withdraw`, `mark_delivered`, `release`, `claim_if_silent`, `refund_if_late`, `cancel_by_freelancer`, `reject`, `propose_settlement`, `accept_settlement`, `burn_if_unsettled`, `close_escrow`): zgoda wykonawcy wiążąca warunki, kaucje obu stron, ustępowanie z `Frozen` przez obie strony, sprawdzanie minta, ograniczone terminy, zdarzenia na każdym przejściu i spór bez arbitra z decay. Poprawki (rewizje) zostały usunięte po audycie.
 
-Kod v2.1 jest gotowy i przetestowany lokalnie; stan wdrożenia na devnecie opisuje sekcja „Devnet”. Jeszcze nie zrobione: odebranie upgrade authority; frontend (`app/`) do dostosowania do nowego IDL.
+Program v2.1 jest wdrożony na devnecie. Jeszcze nie zrobione: odebranie upgrade authority; frontend (`app/`) do dostosowania do nowego IDL.
 
 ## Devnet
 
 - ID programu: `6KsiGDi8o9E1qNWxpzdew2CkDyQFqfeoLs79fAJ457D8`
 - Explorer: https://explorer.solana.com/address/6KsiGDi8o9E1qNWxpzdew2CkDyQFqfeoLs79fAJ457D8?cluster=devnet
-- Wdrożona wersja = escrow v2, kod z commita `321084d` ([transakcja upgrade'u](https://explorer.solana.com/tx/2iZLqrJjPrG5RxiSoCZQeD8P971MEQ6AthYXGmapqR8jwHmTbtoRnhJxCGLWtkH3erC5f5BZVC3KnRLQ9WFiXPjq?cluster=devnet)). Pierwsze 369 992 B programu na łańcuchu są identyczne z `target/deploy/escrow.so` (reszta to zera po `solana program extend`).
+- Wdrożona wersja = escrow v2.1, kod z commita `b0bd804` ([transakcja upgrade'u](https://explorer.solana.com/tx/6hSkpSuM4wrpji84HAR7Cb8uagHbFSp48advWzXsvdPitjeAC43RyCDwYnFnM44gcD3ZYJb72Ru4V22pqcWHc7F?cluster=devnet)). Pierwsze 364 816 B programu na łańcuchu są identyczne z `target/deploy/escrow.so` (reszta to zera po wcześniejszym `solana program extend`).
 - Upgrade authority jest na razie przy portfelu deweloperskim; zostanie odebrane przy code freeze (`solana program set-upgrade-authority --final`).
 
-Powtórzenie demo na devnecie: `yarn demo:setup` (portfele i mint w `.demo-keys/`, poza gitem), potem `yarn demo:flow`, `yarn demo:dispute`, `yarn demo:cancel`, `yarn demo:ghost` i `yarn demo:revision` (wypisują linki do Explorera i sprawdzają statusy przez RPC).
+Powtórzenie demo na devnecie: `yarn demo:setup` (portfele i mint w `.demo-keys/`, poza gitem), potem `yarn demo:flow`, `yarn demo:dispute`, `yarn demo:cancel` i `yarn demo:ghost` (wypisują linki do Explorera i sprawdzają statusy przez RPC).
 
 ## Dowód na devnecie
 
-Program v2: `6KsiGDi8o9E1qNWxpzdew2CkDyQFqfeoLs79fAJ457D8` ([Explorer](https://explorer.solana.com/address/6KsiGDi8o9E1qNWxpzdew2CkDyQFqfeoLs79fAJ457D8?cluster=devnet)). Każda ścieżka to prawdziwe, sfinalizowane transakcje na devnecie, uruchomione skryptami `scripts/demo-*.ts` (kaucja 20% z każdej strony).
+Program v2.1: `6KsiGDi8o9E1qNWxpzdew2CkDyQFqfeoLs79fAJ457D8` ([Explorer](https://explorer.solana.com/address/6KsiGDi8o9E1qNWxpzdew2CkDyQFqfeoLs79fAJ457D8?cluster=devnet)). Każda ścieżka to prawdziwe, sfinalizowane transakcje na devnecie, uruchomione skryptami `scripts/demo-*.ts` (kaucja 20% z każdej strony).
+
+| Ścieżka | Transakcje po kolei | Co pokazuje |
+|---|---|---|
+| a) release (`demo:flow`) | [create](https://explorer.solana.com/tx/64imHYPpwguH2zq5bPDdvMB2YP6cYW6vLWfSwXfLL3V988MFJeYe9TouSVg4jUvFr1A9QZAneVbshWXjoRcGAAsu?cluster=devnet) → [accept_job](https://explorer.solana.com/tx/v7PiSkQ4jGcBykNWNtrVUG4hC4WZFs2xgwRxUi59bdqCqwwTK8QNNbCHvf7Z7xA2kbUTUnE9Co22g4JEABC2vyL?cluster=devnet) → [mark_delivered](https://explorer.solana.com/tx/2Wd3Dy1DZSKgAj3F3yrwNawijUVwWb3rjzUnkiDv6mnKkuiGyx5pfywL84rKpUQtUGWPTRN8SiFLSDPAJpGogdnf?cluster=devnet) → [release](https://explorer.solana.com/tx/3PZ2gfky9nEEJUSb4aDn5U1frtK6rYmceMDottRFpykDRjiTGAoxodrs6uCgCJHVHPcJotJ4XUwYrywYPogy9f5h?cluster=devnet) → [close_escrow](https://explorer.solana.com/tx/37oh1xEAYGJTsjq4q7DFgfQ7CV3ndYBJxWxNvGqbuoZz6aQNFdY9fZ5ndatgmFx6VYDmQ7Bf8ESvaeQRpo552oou?cluster=devnet) | Wykonawca przyjmuje zlecenie i wpłaca kaucję (skarbiec: 120 zamiast 100), a po zatwierdzeniu klient wypłaca mu kwotę plus jego kaucję: wykonawca zarabia dokładnie 100. |
+| b) ghosting (`demo:ghost`) | [create](https://explorer.solana.com/tx/63RnnvphqzwiYsiTPh5pfnG3YKmtFoaxM2zht7Lsajnr8vAYeVXE9PgHYMof44MAMN7pZBpnkrAUtNmUsZGhUCFz?cluster=devnet) → [accept_job](https://explorer.solana.com/tx/3VoGsE5Rc5YFruiSx47wSpbhzoKxsdkYgF55uVnsB3BsfSN4DN9ibKziZbkRyr1f97ZVgKXznxEbS7d9wVi8E71S?cluster=devnet) → [refund_if_late](https://explorer.solana.com/tx/yBXMKigxYeqk23WWxkv1Wv4dumRaQpfig2jpfkAmydDFEsbV81pyte3hTCAGRZzpStXaK7HaBXL5g3mTXvWkYeZ?cluster=devnet) → [close_escrow](https://explorer.solana.com/tx/2vBHrYGEHb41EEZpCcx7r4SUhgKy3ppG7Q7SZ2moDCn9i98Zxcn3XzaVj8qkVaJPWGPZGD8JpvSmG8Gc7RUT7d7t?cluster=devnet) | Wykonawca przyjął zlecenie i zniknął. Po terminie dowolny, trzeci portfel (nie klient ani wykonawca) wywołuje `refund_if_late`, a klient dostaje swoje środki plus kaucję wykonawcy (+20 tokenów kary). |
+| c) spór z decay (`demo:dispute`) | [create](https://explorer.solana.com/tx/3SGQTq2jdNjCWL786XDFs58TMps5bz9vxTmpa6QUDBeNdNKeM1LmvuzhRcMagxssjiCdKtEqJ3JcD4LpTH7Zx23V?cluster=devnet) → [accept_job](https://explorer.solana.com/tx/3RMyqEFPPfF8bNtwzrRyno2yLFUEMT5u1MmWrRQcy1bt1YBMciDMPu9rqyEHxW5Z5cBxbN2vMJgqnQV4qcnRF1ij?cluster=devnet) → [mark_delivered](https://explorer.solana.com/tx/23bmeWoNyKDJjVa2gq7pNjL8FZ7jfewAjNerkVDom3RdGv6aSZJ8jQS8t7TqbMhzcjo2APBYEJyoBjXsBERi9H8b?cluster=devnet) → [reject](https://explorer.solana.com/tx/5umadVo63ZgHtncQHXk6ETZpqLFMmsCkqFY8fJ5iipDQTV5K4YAKGtgzHBuMenwwLkNdhWwvvNw4v9iUCv88W2N8?cluster=devnet) → [propose_settlement](https://explorer.solana.com/tx/5c8bzYRvDwYJVoWRTU7FoyhYMyckuS7a3drqWjCfA6r17Btu7hjdChp3vaStmq73BwwNJcBeeSPrBe4nvpxMg6s8?cluster=devnet) → [accept_settlement](https://explorer.solana.com/tx/2o4JhD3EU8HF57U3v4bhz1zntFmEFLFqnt296hPV5BzG6eMCjUXEfeHNUg4Khccfiuha4jQieRr6vxVFCx5kpLes?cluster=devnet) → [close_escrow](https://explorer.solana.com/tx/2o8bwdXPx1iSgPAzz7Gr6ZusgrqsmrDJ73TAQurXwnzFj3fyYYGU3EjDdMNhL295mDaUQ8LhCh3C9nRSnRWg4fPe?cluster=devnet) | Klient odrzuca dostawę i wpłaca własną kaucję (skarbiec 140), strony ustalają podział 70/30, a ugoda po ok. 20 s z okna 60 s spala część skarbca (43,3%), więc zwlekanie kosztuje obie strony. |
+| d) rezygnacja wykonawcy (`demo:cancel`) | [create](https://explorer.solana.com/tx/2NT3t3GPpoFZwhN3C1wCFQhTX94dC49Lyfm2Ghrpn27crzSxyMEs3AMj4hMXy3NM4337XpGhkYM4LbchKUEXcqJu?cluster=devnet) → [accept_job](https://explorer.solana.com/tx/8B9nbUWjSMWWC2nk78xqhhatg65USb6JzazDZz6uPTH2ViGLNed6UbBY3isQDmfVAnH4Cs1krMJBfqYR3YJNjqC?cluster=devnet) → [mark_delivered](https://explorer.solana.com/tx/2R6sXX96DjncZdm3peHV4UWxFrkB29oTaHSSgGZBRGNwJLBvLsc3qirM6j9sTEZU2FdWBcWHgjg3sSZpxuP5uakD?cluster=devnet) → [cancel_by_freelancer](https://explorer.solana.com/tx/3w4kSrwiGcXtfM4bkEMc3R8JhUTLNbsGNeEE5kW7ANHcKPwd9HdXDHccZ99g2XGKgN9EbDTZxwcrfPrvr3gf19hQ?cluster=devnet) → [close_escrow](https://explorer.solana.com/tx/3qYhPboMdmvsduKRPKXxwrPC6PVdMndkfg8b5SxifJe4d4HXG3hpKaYAMN6QXNdYYFBrkT51gM5uNnU8hRTEXTom?cluster=devnet) | Po dostawie wykonawca jednostronnie rozwiązuje umowę: każda strona dostaje z powrotem dokładnie to, co wpłaciła, bez spalania. |
+| Upgrade authority | `<TBD po --final>` | Po odebraniu nikt, także autor, nie może zmienić programu. |
+
+Linki z kroków `close_escrow` zwracają rent klientowi (skarbiec i konto umowy są zamykane). Ustępowanie z `Frozen` (`release` klienta, `cancel_by_freelancer` wykonawcy) pokrywają testy (`anchor test`), nie skrypty demo.
+
+## Dowód na devnecie: wersja v2.0 (historia)
+
+Te transakcje wykonano na wersji v2.0 (przed łatkami po audycie; wtedy istniało jeszcze `request_revision`, usunięte w v2.1); pozostają na łańcuchu jako historia.
+
+Program v2.0: `6KsiGDi8o9E1qNWxpzdew2CkDyQFqfeoLs79fAJ457D8` ([Explorer](https://explorer.solana.com/address/6KsiGDi8o9E1qNWxpzdew2CkDyQFqfeoLs79fAJ457D8?cluster=devnet)). Każda ścieżka to prawdziwe, sfinalizowane transakcje na devnecie, uruchomione skryptami `scripts/demo-*.ts` (kaucja 20% z każdej strony).
 
 | Ścieżka | Transakcje po kolei | Co pokazuje |
 |---|---|---|

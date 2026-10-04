@@ -105,9 +105,11 @@ export const createCall = (
     .signers([ctx.client])
     .rpc();
 
-export const acceptJobCall = (ctx: Ctx, e: Esc) =>
-  ctx.program.methods
-    .acceptJob()
+// The freelancer signs the terms they just read from the chain (accept_job binds them).
+export const acceptJobCall = async (ctx: Ctx, e: Esc) => {
+  const a = await ctx.program.account.escrow.fetch(e.escrow);
+  return ctx.program.methods
+    .acceptJob(a.amount, a.bondAmount, a.deadlineTs, a.reviewWindowSecs, a.disputeWindowSecs)
     .accountsPartial({
       freelancer: ctx.freelancer.publicKey,
       escrow: e.escrow,
@@ -118,6 +120,7 @@ export const acceptJobCall = (ctx: Ctx, e: Esc) =>
     })
     .signers([ctx.freelancer])
     .rpc();
+};
 
 export const deliverCall = (ctx: Ctx, e: Esc, text = "demo deliverable") =>
   ctx.program.methods

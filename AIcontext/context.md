@@ -23,6 +23,14 @@
 ## Blokery
 - Brak.
 
+## Zadanie 10: escrow v2.1, łatki po audycie (2026-10-04)
+- Commity (każdy z zielonym `anchor test`): 1 `7bcafcf` (usunięte rewizje), 2 `b4af9c1` (`accept_job` wiąże warunki, `TermsMismatch`), 3 `af91d94` (porzucenie po terminie traci kaucję), 4 `99c8a07` (`release` z `Frozen` = ustąpienie klienta, `cancel_by_freelancer` z `Frozen` = ustąpienie wykonawcy, `Released.conceded`), 5 `0bcffd8` (limity w `create`: `SameParty`, `WindowTooLong`, `InvalidReviewWindow`), 6 `b0bd804` (komentarze, main.md, README). `anchor test`: 75 zielonych.
+- Devnet = v2.1 (kod z `b0bd804`): upgrade w slocie 507185326, **bez `extend`** (nowy `.so` 364 816 B mieści się w koncie 372 040 B), authority bez zmian (NIE odebrane), brak osieroconych buforów. Pierwsze 364 816 B zrzutu = `target/deploy/escrow.so`, reszta zera.
+- Saldo portfela dev: **przed 2,522249 SOL**, po upgrade'ie 2,518892 (koszt ok. 0,0034 SOL: tylko opłaty, bufor zwrócony), po demo 2.518891636 SOL.
+- Demo v2.1 na devnecie, 21 transakcji `finalized` (linki w README): `demo:flow` (teraz z `close_escrow`), `demo:ghost`, `demo:dispute` (spalone 43,3%), `demo:cancel`. `demo:revision` usunięte razem z rewizjami. Pierwsze uruchomienie `demo:flow` (umowa G1XEpomt…) przeszło na łańcuchu, ale skrypt padł na odczycie zamkniętego konta (błąd kolejności w skrypcie, poprawiony); umowa jest zamknięta.
+- **FRONT NADAL NA STAREJ WERSJI**: `app/src/idl/` ma IDL v1+cancel (sprzed P5), więc jego transakcje na devnecie są odrzucane (inne argumenty `create`, inne konta, nowe instrukcje). Pełna lista różnic w wiadomości "IDL gotowy".
+- Jawne ograniczenia v2.1: `freeze_authority` minta (np. USDC, Circle) nie blokuje `create`; program nie rozstrzyga, kto ma rację (patrz main.md, odpowiedzi dla jury).
+
 ## Zadanie 8: escrow v2 (2026-10-04)
 - Etapy (każdy: zielony `anchor test` + osobny commit): P1 `322a71c` (walidacja minta, burn dustu w close), P2 `36c9987` (accept_job, withdraw, kaucje, reject/cancel z kaucjami), P3 `291fe14` (permissionless claim_if_silent i refund_if_late), P4 `7d0e076` (request_revision), P5 `321084d` (13 zdarzeń). `anchor test`: 71 zielonych.
 - Konto Escrow: rozmiar bez zmian (235 B), nowe pola z `_reserved` (45 -> 27): bond_amount, max_revisions, revisions_used, revision_window_secs. Nowy stan `Accepted` na końcu enuma.

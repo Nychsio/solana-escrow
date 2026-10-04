@@ -81,7 +81,7 @@ Każda instrukcja sprawdza stan przez jedną funkcję `Escrow::require_state`. W
 1. Szkielet repo + `create` + test — **zrobione**
 2. `mark_delivered`, `release`, `claim_if_silent`, `refund_if_late`, `reject` + testy — **zrobione**
 2a. Escrow v2 (P1–P5): walidacja minta, zgoda wykonawcy i kaucje, crank, zdarzenia — **zrobione**
-2b. Escrow v2.1 (łatki po audycie): bez rewizji, `accept_job` wiąże warunki, porzucenie kosztuje, ustępowanie z `Frozen`, limity w `create` — **zrobione** w kodzie (wdrożenie na devnecie: patrz context.md)
+2b. Escrow v2.1 (łatki po audycie): bez rewizji, `accept_job` wiąże warunki, porzucenie kosztuje, ustępowanie z `Frozen`, limity w `create` — **zrobione**, wdrożone na devnecie
 3. Deploy na devnet, odebranie upgrade authority
 4. Frontend: połączenie portfela, widok klienta i wykonawcy
 5. (opcjonalnie) cecha wyróżniająca — do decyzji po MVP

@@ -1,6 +1,6 @@
-// Happy path on devnet: create -> accept_job -> mark_delivered -> release, with 20% bonds.
+// Happy path on devnet: create -> accept_job -> mark_delivered -> release -> close_escrow, with 20% bonds.
 import {
-  AMOUNT, Run, acceptJobCall, balanceOf, createCall, chainNow, deliverCall,
+  AMOUNT, Run, acceptJobCall, balanceOf, closeCall, createCall, chainNow, deliverCall,
   loadContext, newEscrow, releaseCall, tokens,
 } from "./demo-lib";
 import { getAccount } from "@solana/spl-token";
@@ -31,6 +31,7 @@ async function main() {
   if ((await balanceOf(ctx.freelancerToken)) - freelancerStart !== BigInt(AMOUNT.toString())) {
     throw new Error("freelancer should net exactly the amount");
   }
+  await run.step("close_escrow", closeCall(ctx, e));
   await run.verify();
 }
 
