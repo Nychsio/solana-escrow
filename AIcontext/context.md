@@ -23,6 +23,15 @@
 ## Blokery
 - Brak.
 
+## Zadanie 14: przejęcie łatki w payout.rs, twardy termin klucza (2026-10-04)
+- Program (commit `2d8b1ff`): (1) `cancel_by_freelancer` z zapieczętowanego `Delivered` po końcu okna akceptacji traci kaucję jak z `Approved`; (2) twardy termin klucza w `claim_with_key`, wspólny z `refund_unrevealed` przez `Escrow::key_deadline()` (+ `key_claimable`/`key_unclaimed`). Łatka z zewnętrznego audytu była niezacommitowana i bez testów; przejęta i przepisana (`unwrap_or(0)` -> `?`).
+- Testy: `anchor test` 101 zielonych (94 + 7 nowych: cancel sealed w oknie i po oknie, cancel jawnej po oknie, claim po terminie/refund (Approved i cichy klient), claim w oknie, pętla symulacji "dokładnie jedna z dwóch instrukcji"); 5 testów jednostkowych Rust dla granicy co do sekundy (`cargo test -p escrow --lib`). Istniejące testy z krótkim oknem klucza poszerzone (okno 8 s), bo claim musi zmieścić się w terminie.
+- **Zastrzeżenie:** test "ostatnia sekunda OK, następna błąd" na walidatorze jest niewykonalny: zegar Surfpool jest slotowy (400 ms), `surfnet_timeTravel` nie trafia co do sekundy. Dokładność co do sekundy dowodzą testy jednostkowe funkcji wspólnej dla obu instrukcji, a testy na walidatorze sprawdzają obie strony granicy i brak nakładania.
+- **IDL bez zmian:** sha256 `target/idl/escrow.json` przed i po `30c8ae116faece9825dd981fc4251000ff4a386eac9db35c3017fcb6e881c2a8` (identyczny z `app/src/idl/escrow.json`); `target/types/escrow.ts` bez zmian.
+- Devnet = kod z `2d8b1ff`: slot upgrade'u 507218215, authority bez zmian (NIE odebrane), bez `extend` (`.so` 395 336 B < konto 396 792 B), pierwsze 395 336 B zrzutu = `target/deploy/escrow.so`, reszta zera, brak osieroconych buforów. Saldo portfela dev: **przed 2,380951 SOL**, po upgrade'ie 2,378861 (tylko opłaty, bufor zwrócony), po demo 2,378861 SOL.
+- `demo:sealed` na devnecie (6 transakcji `finalized`, link w README). Pomyłka przy uruchamianiu: moja linia `echo` uruchomiła `demo:sealed` drugi raz i zostawiła otwartą umowę `funded`; zamknięta (`withdraw` + `close_escrow` przez `close-open-escrows.ts`), na devnecie 0 kont `Escrow`.
+- Front (`app/`) ma już strażnika terminu klucza (`CLOSE_SECS = 120`, commit `2fcc96d`); `app/` nie ruszany.
+
 ## Zadanie 13: dwie poprawki logiki, ostatnia zmiana programu przed --final (2026-10-04)
 - Program (commit `145124a`): (1) `cancel_by_freelancer` z `Approved` oddaje klientowi całe saldo razem z kaucją wykonawcy; (2) `claim_with_key` nigdy nie płaci skonta, `release` zapieczętowanej tylko zatwierdza (`Approved.early = false`). `anchor test`: 94 zielone (zaktualizowane testy: cancel z `Approved`, skonto dla zapieczętowanej = 0; usunięty test spóźnionego klucza, który stracił sens).
 - **IDL bez zmian:** sha256 `target/idl/escrow.json` przed i po `30c8ae116faece9825dd981fc4251000ff4a386eac9db35c3017fcb6e881c2a8` (identyczny z `app/src/idl/escrow.json`), `target/types/escrow.ts` `f380379d221ad864de462c8fde0316f0e5c5ee11b43d2cd0e9eb7f61b7b0f04c` przed i po. Komentarze `///` przy polach i kontach celowo nie zmienione (trafiają do IDL), więc opisy `Approved.early` i `ClaimWithKey.client_token` w IDL są lekko nieaktualne.
