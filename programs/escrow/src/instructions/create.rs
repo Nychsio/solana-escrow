@@ -83,10 +83,20 @@ pub fn create(
     deadline_ts: i64,
     review_window_secs: u64,
     dispute_window_secs: u64,
+    bond_bps: u16,
+    max_revisions: u8,
+    revision_window_secs: u64,
 ) -> Result<()> {
     check_mint_supported(&ctx.accounts.mint.to_account_info())?;
     require!(amount > 0, ErrorCode::InvalidAmount);
     require!(dispute_window_secs > 0, ErrorCode::InvalidDisputeWindow);
+    require!(bond_bps <= MAX_BPS, ErrorCode::InvalidBps);
+    require!(
+        max_revisions <= MAX_REVISIONS && (max_revisions == 0 || revision_window_secs > 0),
+        ErrorCode::InvalidRevisionConfig
+    );
+    let bond_amount = u64::try_from(u128::from(amount) * u128::from(bond_bps) / u128::from(MAX_BPS))
+        .map_err(|_| ErrorCode::InvalidBps)?;
     let now = Clock::get()?.unix_timestamp;
     require!(deadline_ts > now, ErrorCode::DeadlineInPast);
 
@@ -106,7 +116,11 @@ pub fn create(
         frozen_at: 0,
         settle_proposer: SETTLE_NONE,
         settle_bps: 0,
-        _reserved: [0; 45],
+        bond_amount,
+        max_revisions,
+        revisions_used: 0,
+        revision_window_secs,
+        _reserved: [0; 27],
     });
 
     let cpi_accounts = TransferChecked {

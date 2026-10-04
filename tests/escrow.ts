@@ -93,7 +93,10 @@ describe("escrow", () => {
     amount: BN,
     deadlineTs: number,
     reviewWindowSecs: number,
-    disputeWindowSecs = 3600
+    disputeWindowSecs = 3600,
+    bondBps = 0,
+    maxRevisions = 0,
+    revisionWindowSecs = 60
   ) => {
     const escrow = escrowPda(id);
     return program.methods
@@ -102,7 +105,10 @@ describe("escrow", () => {
         amount,
         new BN(deadlineTs),
         new BN(reviewWindowSecs),
-        new BN(disputeWindowSecs)
+        new BN(disputeWindowSecs),
+        bondBps,
+        maxRevisions,
+        new BN(revisionWindowSecs)
       )
       .accountsPartial({
         client: client.publicKey,
@@ -117,18 +123,68 @@ describe("escrow", () => {
       .rpc();
   };
 
-  // Opens a funded escrow and returns its address plus its deadline.
+  // Creates an escrow and, unless told otherwise, has the freelancer accept the job
+  // (state Accepted). Returns its address plus its deadline.
   const open = async (
     deadlineInSecs: number,
     reviewWindowSecs: number,
     disputeWindowSecs = 3600,
-    amount = AMOUNT
+    amount = AMOUNT,
+    opts: {
+      accept?: boolean;
+      bondBps?: number;
+      maxRevisions?: number;
+      revisionWindowSecs?: number;
+    } = {}
   ) => {
     const id = new BN(nextId++);
     const deadlineTs = (await chainNow()) + deadlineInSecs;
-    await create(id, amount, deadlineTs, reviewWindowSecs, disputeWindowSecs);
-    return { escrow: escrowPda(id), deadlineTs };
+    await create(
+      id,
+      amount,
+      deadlineTs,
+      reviewWindowSecs,
+      disputeWindowSecs,
+      opts.bondBps ?? 0,
+      opts.maxRevisions ?? 0,
+      opts.revisionWindowSecs ?? 60
+    );
+    const escrow = escrowPda(id);
+    if (opts.accept !== false) await acceptJob(escrow);
+    return { escrow, deadlineTs };
   };
+
+  const acceptJob = (
+    escrow: PublicKey,
+    signer = freelancer,
+    source = freelancerToken
+  ) =>
+    program.methods
+      .acceptJob()
+      .accountsPartial({
+        freelancer: signer.publicKey,
+        escrow,
+        mint,
+        vault: vaultOf(escrow),
+        freelancerToken: source,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([signer])
+      .rpc();
+
+  const withdraw = (escrow: PublicKey, signer = client) =>
+    program.methods
+      .withdraw()
+      .accountsPartial({
+        client: signer.publicKey,
+        escrow,
+        mint,
+        vault: vaultOf(escrow),
+        clientToken,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([signer])
+      .rpc();
 
   const markDelivered = (escrow: PublicKey, signer = freelancer) =>
     program.methods
@@ -140,7 +196,14 @@ describe("escrow", () => {
   const reject = (escrow: PublicKey, signer = client) =>
     program.methods
       .reject()
-      .accountsPartial({ client: signer.publicKey, escrow })
+      .accountsPartial({
+        client: signer.publicKey,
+        escrow,
+        mint,
+        vault: vaultOf(escrow),
+        clientToken,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
       .signers([signer])
       .rpc();
 
@@ -246,6 +309,7 @@ describe("escrow", () => {
         mint,
         vault: vaultOf(escrow),
         clientToken: destination,
+        freelancerToken,
         tokenProgram: TOKEN_PROGRAM_ID,
       })
       .signers([signer])
@@ -292,8 +356,12 @@ describe("escrow", () => {
   };
 
   // Delivered and rejected inside the review window, so the escrow is Frozen.
-  const freeze = async (disputeWindowSecs = 3600, amount = AMOUNT) => {
-    const { escrow } = await open(LONG, 3600, disputeWindowSecs, amount);
+  const freeze = async (
+    disputeWindowSecs = 3600,
+    amount = AMOUNT,
+    opts: { bondBps?: number } = {}
+  ) => {
+    const { escrow } = await open(LONG, 3600, disputeWindowSecs, amount, opts);
     await markDelivered(escrow);
     await reject(escrow);
     return escrow;
@@ -319,6 +387,8 @@ describe("escrow", () => {
     await expectError(accept(escrow, 5000, client), "InvalidState");
     await expectError(burn(escrow), "InvalidState");
     await expectError(cancel(escrow), "InvalidState");
+    await expectError(acceptJob(escrow), "InvalidState");
+    await expectError(withdraw(escrow), "InvalidState");
   };
 
   const expectError = async (promise: Promise<unknown>, code: string) => {
@@ -375,6 +445,7 @@ describe("escrow", () => {
     clientToken = await tokenAccount(client.publicKey);
     freelancerToken = await tokenAccount(freelancer.publicKey);
     await mintTo(connection, client, mint, clientToken, client, MINTED);
+    await mintTo(connection, client, mint, freelancerToken, client, MINTED);
   });
 
   describe("create", () => {
@@ -402,7 +473,10 @@ describe("escrow", () => {
       assert.equal(account.frozenAt.toString(), "0");
       assert.equal(account.settleProposer, 0);
       assert.equal(account.settleBps, 0);
-      assert.deepEqual(account.reserved, new Array(45).fill(0));
+      assert.equal(account.bondAmount.toString(), "0");
+      assert.equal(account.maxRevisions, 0);
+      assert.equal(account.revisionsUsed, 0);
+      assert.deepEqual(account.reserved, new Array(27).fill(0));
       // 8-byte discriminator + 235 bytes: the layout size must never change.
       const info = await connection.getAccountInfo(escrow);
       assert.equal(info!.data.length, 8 + 235);
@@ -450,7 +524,7 @@ describe("escrow", () => {
 
   describe("release", () => {
     it("client pays the freelancer straight from Funded", async () => {
-      const { escrow } = await open(LONG, 3600);
+      const { escrow } = await open(LONG, 3600, 3600, AMOUNT, { accept: false });
       await expectPayout(escrow, freelancerToken, () => release(escrow));
       assert.deepEqual(await stateOf(escrow), { released: {} });
     });
@@ -792,7 +866,7 @@ describe("escrow", () => {
     };
 
     it("returns everything to the client from Funded, then close works", async () => {
-      const { escrow } = await open(LONG, 3600);
+      const { escrow } = await open(LONG, 3600, 3600, AMOUNT, { accept: false });
       await expectRefundThenClose(escrow);
     });
 
@@ -844,9 +918,17 @@ describe("escrow", () => {
     });
 
     it("rejects a payout account that does not belong to the client", async () => {
-      const { escrow } = await open(LONG, 3600);
+      const { escrow } = await open(LONG, 3600, 3600, AMOUNT, { accept: false });
+      const strangerToken = (
+        await getOrCreateAssociatedTokenAccount(
+          connection,
+          client,
+          mint,
+          stranger.publicKey
+        )
+      ).address;
       await expectError(
-        cancel(escrow, freelancer, freelancerToken),
+        cancel(escrow, freelancer, strangerToken),
         "ConstraintTokenOwner"
       );
       assert.equal(await balance(vaultOf(escrow)), AMOUNT.toString());
@@ -918,7 +1000,16 @@ describe("escrow", () => {
       const escrow = escrowPda(id);
       const deadlineTs = (await chainNow()) + LONG;
       await program.methods
-        .create(id, AMOUNT, new BN(deadlineTs), new BN(3600), new BN(3600))
+        .create(
+          id,
+          AMOUNT,
+          new BN(deadlineTs),
+          new BN(3600),
+          new BN(3600),
+          0,
+          0,
+          new BN(0)
+        )
         .accountsPartial({
           client: client.publicKey,
           freelancer: freelancer.publicKey,
@@ -1044,6 +1135,205 @@ describe("escrow", () => {
       );
       assert.isNull(await connection.getAccountInfo(escrow));
       assert.isNull(await connection.getAccountInfo(vaultOf(escrow)));
+    });
+  });
+
+  describe("bonds and job acceptance", () => {
+    const BOND_BPS = 2000;
+    const BOND = (AMOUNT.toNumber() * BOND_BPS) / 10000; // 50_000_000
+    const withBond = { bondBps: BOND_BPS };
+    const bal = async (account: PublicKey) => Number(await balance(account));
+
+    it("accept_job moves the freelancer's bond into the vault", async () => {
+      const { escrow } = await open(LONG, 3600, 3600, AMOUNT, {
+        accept: false,
+        ...withBond,
+      });
+      assert.equal(await balance(vaultOf(escrow)), AMOUNT.toString());
+      const account = await program.account.escrow.fetch(escrow);
+      assert.equal(account.bondAmount.toNumber(), BOND);
+      assert.deepEqual(account.state, { funded: {} });
+
+      const before = await bal(freelancerToken);
+      await acceptJob(escrow);
+
+      assert.equal(await bal(vaultOf(escrow)), AMOUNT.toNumber() + BOND);
+      assert.equal(await bal(freelancerToken), before - BOND);
+      assert.deepEqual(await stateOf(escrow), { accepted: {} });
+    });
+
+    it("accept_job is only for the freelancer, once, before the deadline", async () => {
+      const { escrow } = await open(LONG, 3600, 3600, AMOUNT, { accept: false });
+      await expectError(acceptJob(escrow, client, clientToken), "Unauthorized");
+      await expectError(acceptJob(escrow, stranger), "Unauthorized");
+      await acceptJob(escrow);
+      await expectError(acceptJob(escrow), "InvalidState");
+
+      const late = await open(4, 3600, 3600, AMOUNT, { accept: false });
+      await waitUntilAfter(late.deadlineTs);
+      await expectError(acceptJob(late.escrow), "DeadlinePassed");
+    });
+
+    it("the freelancer needs the tokens for the bond", async () => {
+      const broke = Keypair.generate();
+      const brokeToken = (
+        await getOrCreateAssociatedTokenAccount(
+          connection,
+          client,
+          mint,
+          broke.publicKey
+        )
+      ).address;
+      const id = new BN(nextId++);
+      const escrow = escrowPda(id);
+      const deadlineTs = (await chainNow()) + LONG;
+      await program.methods
+        .create(id, AMOUNT, new BN(deadlineTs), new BN(3600), new BN(3600), BOND_BPS, 0, new BN(60))
+        .accountsPartial({
+          client: client.publicKey,
+          freelancer: broke.publicKey,
+          mint,
+          clientToken,
+          escrow,
+          vault: vaultOf(escrow),
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([client])
+        .rpc();
+
+      let failed = false;
+      try {
+        await acceptJob(escrow, broke, brokeToken);
+      } catch {
+        failed = true;
+      }
+      assert.isTrue(failed, "accept_job must fail without tokens for the bond");
+      assert.deepEqual(await stateOf(escrow), { funded: {} });
+      assert.equal(await balance(vaultOf(escrow)), AMOUNT.toString());
+    });
+
+    it("withdraw returns the funds before acceptance, and is client-only", async () => {
+      const { escrow } = await open(LONG, 3600, 3600, AMOUNT, {
+        accept: false,
+        ...withBond,
+      });
+      await expectError(withdraw(escrow, freelancer), "Unauthorized");
+      await expectError(withdraw(escrow, stranger), "Unauthorized");
+
+      await expectPayout(escrow, clientToken, () => withdraw(escrow));
+      assert.deepEqual(await stateOf(escrow), { refunded: {} });
+      await closeEscrow(escrow);
+      assert.isNull(await connection.getAccountInfo(escrow));
+    });
+
+    it("withdraw is refused once the freelancer accepted", async () => {
+      const { escrow } = await open(LONG, 3600, 3600, AMOUNT, withBond);
+      await expectError(withdraw(escrow), "InvalidState");
+      assert.equal(await bal(vaultOf(escrow)), AMOUNT.toNumber() + BOND);
+    });
+
+    it("mark_delivered needs an accepted job", async () => {
+      const { escrow } = await open(LONG, 3600, 3600, AMOUNT, { accept: false });
+      await expectError(markDelivered(escrow), "InvalidState");
+    });
+
+    it("release pays the amount plus the freelancer's bond", async () => {
+      const { escrow } = await open(LONG, 3600, 3600, AMOUNT, withBond);
+      await markDelivered(escrow);
+      const before = await bal(freelancerToken);
+      await release(escrow);
+      assert.equal(await bal(freelancerToken), before + AMOUNT.toNumber() + BOND);
+      assert.equal(await balance(vaultOf(escrow)), "0");
+    });
+
+    it("refund_if_late from Accepted gives the client the amount plus the ghost's bond", async () => {
+      const { escrow, deadlineTs } = await open(4, 3600, 3600, AMOUNT, withBond);
+      await waitUntilAfter(deadlineTs);
+      const before = await bal(clientToken);
+      await refundIfLate(escrow);
+      assert.equal(await bal(clientToken), before + AMOUNT.toNumber() + BOND);
+      assert.deepEqual(await stateOf(escrow), { refunded: {} });
+    });
+
+    it("reject takes the client's bond, so the vault holds the amount plus both bonds", async () => {
+      const { escrow } = await open(LONG, 3600, 3600, AMOUNT, withBond);
+      await markDelivered(escrow);
+      const before = await bal(clientToken);
+      await reject(escrow);
+      assert.equal(await bal(clientToken), before - BOND);
+      assert.equal(await bal(vaultOf(escrow)), AMOUNT.toNumber() + 2 * BOND);
+      assert.deepEqual(await stateOf(escrow), { frozen: {} });
+    });
+
+    it("a settlement burns and pays out exactly the amount plus both bonds", async () => {
+      const escrow = await freeze(3600, AMOUNT, withBond);
+      await propose(escrow, 6000, client);
+      const result = await settle(escrow, 6000, freelancer);
+      assert.equal(
+        Number(result.vaultBefore),
+        AMOUNT.toNumber() + 2 * BOND
+      );
+    });
+
+    it("burn_if_unsettled burns the amount plus both bonds", async () => {
+      const escrow = await freeze(4, AMOUNT, withBond);
+      await waitForDisputeEnd(escrow);
+      const supplyBefore = (await getMint(connection, mint)).supply;
+      await burn(escrow);
+      assert.equal(
+        (supplyBefore - (await getMint(connection, mint)).supply).toString(),
+        String(AMOUNT.toNumber() + 2 * BOND)
+      );
+      assert.equal(await balance(vaultOf(escrow)), "0");
+    });
+
+    it("cancel from Funded gives the client everything and takes nothing from the freelancer", async () => {
+      const { escrow } = await open(LONG, 3600, 3600, AMOUNT, {
+        accept: false,
+        ...withBond,
+      });
+      const clientBefore = await bal(clientToken);
+      const freelancerBefore = await bal(freelancerToken);
+      await cancel(escrow);
+      assert.equal(await bal(clientToken), clientBefore + AMOUNT.toNumber());
+      assert.equal(await bal(freelancerToken), freelancerBefore);
+    });
+
+    it("cancel from Delivered returns each side exactly its own deposit", async () => {
+      const { escrow } = await open(LONG, 3600, 3600, AMOUNT, withBond);
+      await markDelivered(escrow);
+      const clientBefore = await bal(clientToken);
+      const freelancerBefore = await bal(freelancerToken);
+      await cancel(escrow);
+      assert.equal(await bal(clientToken), clientBefore + AMOUNT.toNumber());
+      assert.equal(await bal(freelancerToken), freelancerBefore + BOND);
+      assert.equal(await balance(vaultOf(escrow)), "0");
+    });
+
+    it("cancel from Frozen returns each side exactly its own deposit, no burn", async () => {
+      const escrow = await freeze(3600, AMOUNT, withBond);
+      const clientBefore = await bal(clientToken);
+      const freelancerBefore = await bal(freelancerToken);
+      const supplyBefore = (await getMint(connection, mint)).supply;
+      await cancel(escrow);
+      // Client: its amount plus its own bond; freelancer: its bond.
+      assert.equal(
+        await bal(clientToken),
+        clientBefore + AMOUNT.toNumber() + BOND
+      );
+      assert.equal(await bal(freelancerToken), freelancerBefore + BOND);
+      assert.equal(
+        (await getMint(connection, mint)).supply.toString(),
+        supplyBefore.toString()
+      );
+    });
+
+    it("rejects a bond above 10000 bps", async () => {
+      const deadlineTs = (await chainNow()) + LONG;
+      await expectError(
+        create(new BN(nextId++), AMOUNT, deadlineTs, 3600, 3600, 10001),
+        "InvalidBps"
+      );
     });
   });
 
