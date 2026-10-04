@@ -46,6 +46,7 @@ describe("escrow", () => {
   let mint: PublicKey;
   let clientToken: PublicKey;
   let freelancerToken: PublicKey;
+  let strangerToken: PublicKey;
   let nextId = 1;
 
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -233,7 +234,7 @@ describe("escrow", () => {
     program.methods
       .claimIfSilent()
       .accountsPartial({
-        freelancer: signer.publicKey,
+        caller: signer.publicKey,
         escrow,
         mint,
         vault: vaultOf(escrow),
@@ -251,7 +252,7 @@ describe("escrow", () => {
     program.methods
       .refundIfLate()
       .accountsPartial({
-        client: signer.publicKey,
+        caller: signer.publicKey,
         escrow,
         mint,
         vault: vaultOf(escrow),
@@ -444,6 +445,7 @@ describe("escrow", () => {
         .address;
     clientToken = await tokenAccount(client.publicKey);
     freelancerToken = await tokenAccount(freelancer.publicKey);
+    strangerToken = await tokenAccount(stranger.publicKey);
     await mintTo(connection, client, mint, clientToken, client, MINTED);
     await mintTo(connection, client, mint, freelancerToken, client, MINTED);
   });
@@ -1337,6 +1339,58 @@ describe("escrow", () => {
     });
   });
 
+  describe("permissionless crank", () => {
+    it("a stranger can trigger claim_if_silent, and the money goes to the freelancer", async () => {
+      const { escrow } = await open(LONG, 3);
+      await markDelivered(escrow);
+      const account = await program.account.escrow.fetch(escrow);
+      await waitUntilAfter((account.deliveredAt as BN).toNumber() + 3);
+
+      const strangerBefore = await balance(strangerToken);
+      await expectPayout(escrow, freelancerToken, () =>
+        claimIfSilent(escrow, stranger)
+      );
+      assert.equal(await balance(strangerToken), strangerBefore);
+      assert.deepEqual(await stateOf(escrow), { released: {} });
+    });
+
+    it("claim_if_silent refuses a stranger's own token account as the destination", async () => {
+      const { escrow } = await open(LONG, 3);
+      await markDelivered(escrow);
+      const account = await program.account.escrow.fetch(escrow);
+      await waitUntilAfter((account.deliveredAt as BN).toNumber() + 3);
+
+      await expectError(
+        claimIfSilent(escrow, stranger, strangerToken),
+        "ConstraintTokenOwner"
+      );
+      assert.equal(await balance(vaultOf(escrow)), AMOUNT.toString());
+    });
+
+    it("a stranger can trigger refund_if_late, and the money goes to the client", async () => {
+      const { escrow, deadlineTs } = await open(4, 3600);
+      await waitUntilAfter(deadlineTs);
+
+      const strangerBefore = await balance(strangerToken);
+      await expectPayout(escrow, clientToken, () =>
+        refundIfLate(escrow, stranger)
+      );
+      assert.equal(await balance(strangerToken), strangerBefore);
+      assert.deepEqual(await stateOf(escrow), { refunded: {} });
+    });
+
+    it("refund_if_late refuses a stranger's own token account as the destination", async () => {
+      const { escrow, deadlineTs } = await open(4, 3600);
+      await waitUntilAfter(deadlineTs);
+
+      await expectError(
+        refundIfLate(escrow, stranger, strangerToken),
+        "ConstraintTokenOwner"
+      );
+      assert.equal(await balance(vaultOf(escrow)), AMOUNT.toString());
+    });
+  });
+
   describe("wrong signer", () => {
     it("rejects every instruction called by the wrong party", async () => {
       const { escrow } = await open(LONG, 3600);
@@ -1345,9 +1399,11 @@ describe("escrow", () => {
       await expectError(markDelivered(escrow, stranger), "Unauthorized");
       await expectError(release(escrow, freelancer), "Unauthorized");
       await expectError(release(escrow, stranger), "Unauthorized");
+      // claim_if_silent and refund_if_late are open to any caller; the destination
+      // account is what is pinned (see the "crank" tests).
       await expectError(
         refundIfLate(escrow, freelancer, freelancerToken),
-        "Unauthorized"
+        "ConstraintTokenOwner"
       );
 
       await markDelivered(escrow);
@@ -1356,9 +1412,9 @@ describe("escrow", () => {
       await expectError(reject(escrow, stranger), "Unauthorized");
       await expectError(
         claimIfSilent(escrow, client, clientToken),
-        "Unauthorized"
+        "ConstraintTokenOwner"
       );
-      await expectError(claimIfSilent(escrow, stranger), "Unauthorized");
+      await expectError(claimIfSilent(escrow, stranger), "ReviewWindowOpen");
 
       assert.equal(await balance(vaultOf(escrow)), AMOUNT.toString());
       assert.deepEqual(await stateOf(escrow), { delivered: {} });

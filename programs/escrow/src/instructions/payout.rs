@@ -32,12 +32,9 @@ pub struct Release<'info> {
 
 #[derive(Accounts)]
 pub struct ClaimIfSilent<'info> {
-    pub freelancer: Signer<'info>,
-    #[account(
-        mut,
-        has_one = freelancer @ ErrorCode::Unauthorized,
-        has_one = mint,
-    )]
+    /// Anyone can trigger the payout; it can only go to the freelancer's account.
+    pub caller: Signer<'info>,
+    #[account(mut, has_one = mint)]
     pub escrow: Account<'info, Escrow>,
     pub mint: InterfaceAccount<'info, Mint>,
     #[account(
@@ -50,7 +47,7 @@ pub struct ClaimIfSilent<'info> {
     #[account(
         mut,
         token::mint = mint,
-        token::authority = freelancer,
+        token::authority = escrow.freelancer,
         token::token_program = token_program,
     )]
     pub freelancer_token: InterfaceAccount<'info, TokenAccount>,
@@ -59,12 +56,9 @@ pub struct ClaimIfSilent<'info> {
 
 #[derive(Accounts)]
 pub struct RefundIfLate<'info> {
-    pub client: Signer<'info>,
-    #[account(
-        mut,
-        has_one = client @ ErrorCode::Unauthorized,
-        has_one = mint,
-    )]
+    /// Anyone can trigger the refund; it can only go to the client's account.
+    pub caller: Signer<'info>,
+    #[account(mut, has_one = mint)]
     pub escrow: Account<'info, Escrow>,
     pub mint: InterfaceAccount<'info, Mint>,
     #[account(
@@ -77,7 +71,7 @@ pub struct RefundIfLate<'info> {
     #[account(
         mut,
         token::mint = mint,
-        token::authority = client,
+        token::authority = escrow.client,
         token::token_program = token_program,
     )]
     pub client_token: InterfaceAccount<'info, TokenAccount>,
