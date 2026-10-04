@@ -227,7 +227,8 @@ pub fn release(ctx: Context<Release>) -> Result<()> {
 
     if escrow.is_sealed() {
         escrow.approved_at = now;
-        let early = !conceded && escrow.is_early(now);
+        // No discount for a sealed delivery, so an approval is never "early".
+        let early = false;
         escrow.state = EscrowState::Approved;
         emit!(Approved {
             escrow: ctx.accounts.escrow.key(),
@@ -343,12 +344,16 @@ pub fn withdraw(ctx: Context<Withdraw>) -> Result<()> {
 }
 
 /// Freelancer unwinds the deal, no burn. Only the signer gives anything up:
-/// - before the deadline (Accepted) or after a delivery: they get their own bond back
-///   and the client gets the rest of the vault;
+/// - before the deadline (Accepted) or after a delivery that is still open for review
+///   (Delivered): they get their own bond back and the client gets the rest of the vault;
 /// - from `Frozen` it is the freelancer conceding the dispute: the whole vault, their
 ///   bond included, goes to the client (the mirror of the client's release);
 /// - from Accepted after the deadline it is abandonment, so the bond goes to the client
-///   too (the same outcome as refund_if_late), otherwise quitting late would be free.
+///   too (the same outcome as refund_if_late), otherwise quitting late would be free;
+/// - from `Approved` the client has already approved a sealed delivery, so backing out
+///   instead of revealing the key is withholding the key: the whole vault, bond
+///   included, goes to the client, exactly like refund_unrevealed. Otherwise the penalty
+///   for withholding the key could be sidestepped by cancelling.
 pub fn cancel_by_freelancer(ctx: Context<CancelByFreelancer>) -> Result<()> {
     let escrow = &mut ctx.accounts.escrow;
     escrow.require_state(&[
@@ -363,7 +368,8 @@ pub fn cancel_by_freelancer(ctx: Context<CancelByFreelancer>) -> Result<()> {
     let freelancer_bond_paid = escrow.state != EscrowState::Funded;
     let abandoned = escrow.state == EscrowState::Accepted && now > escrow.deadline_ts;
     let conceded = escrow.state == EscrowState::Frozen;
-    let freelancer_amount = if freelancer_bond_paid && !abandoned && !conceded {
+    let withheld_key = escrow.state == EscrowState::Approved;
+    let freelancer_amount = if freelancer_bond_paid && !abandoned && !conceded && !withheld_key {
         escrow.bond_amount.min(vault_amount)
     } else {
         0
@@ -411,15 +417,11 @@ pub fn claim_with_key(ctx: Context<ClaimWithKey>, key: [u8; 32]) -> Result<()> {
         solana_sha256_hasher::hash(&key).to_bytes() == escrow.key_hash,
         ErrorCode::InvalidKey
     );
-    // The discount follows the client's approval, not the reveal: it is judged on
-    // approved_at against delivered_at, so a late reveal does not cost the client it. A
-    // client who stayed silent (Delivered) approved nothing, and one who conceded a
-    // dispute is excluded by is_early (frozen_at != 0).
-    let discount = if escrow.state == EscrowState::Approved {
-        escrow.early_discount(escrow.approved_at)
-    } else {
-        0
-    };
+    // A sealed delivery never earns the early-payment discount: the client approved work it
+    // could not see, and a quick approval of unseen work is not what the discount rewards.
+    // The client_token account and the discount fields stay in the interface (and the
+    // events carry a zero) so the IDL does not change.
+    let discount = 0;
     escrow.revealed_key = key;
     escrow.state = EscrowState::Released;
 

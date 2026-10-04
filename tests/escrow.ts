@@ -1890,14 +1890,15 @@ describe("escrow", () => {
       );
     });
 
-    it("cancel from Approved returns the freelancer's bond and the amount to the client", async () => {
+    it("cancel from Approved is withholding the key: the client gets the whole vault, bond included", async () => {
       const { escrow } = await sealed(3600, BOND_BPS);
       await release(escrow);
       const clientBefore = await bal(clientToken);
       const freelancerBefore = await bal(freelancerToken);
       await cancel(escrow);
-      assert.equal(await bal(clientToken), clientBefore + AMOUNT.toNumber());
-      assert.equal(await bal(freelancerToken), freelancerBefore + BOND);
+      // The same outcome as refund_unrevealed: cancelling cannot sidestep that penalty.
+      assert.equal(await bal(clientToken), clientBefore + AMOUNT.toNumber() + BOND);
+      assert.equal(await bal(freelancerToken), freelancerBefore);
       assert.equal(await balance(vaultOf(escrow)), "0");
       assert.deepEqual(await stateOf(escrow), { refunded: {} });
     });
@@ -1986,15 +1987,15 @@ describe("escrow", () => {
       assert.deepEqual(await stateOf(escrow), { released: {} });
     });
 
-    it("a sealed delivery approved in the window pays the discount when the key is claimed", async () => {
+    it("a sealed delivery never earns the discount, however early the client approves", async () => {
       const key = randomBytes(32);
       const { escrow } = await open(LONG, 3600, 3600, AMOUNT, offer(3600));
       await markDelivered(escrow, freelancer, sha256(key));
 
       const clientBefore = await bal(clientToken);
       const approvedSig = await release(escrow);
-      assert.isTrue((await only(approvedSig, "Approved")).early);
-      // Approval moves no money.
+      // Approval moves no money, and an approval of a sealed delivery is never "early".
+      assert.isFalse((await only(approvedSig, "Approved")).early);
       assert.equal(await bal(clientToken), clientBefore);
       assert.equal(await bal(vaultOf(escrow)), AMOUNT.toNumber() + BOND);
 
@@ -2002,20 +2003,12 @@ describe("escrow", () => {
       const r = await measure(escrow, async () => {
         claimSig = await claimWithKey(escrow, key);
       });
-      assert.equal(r.toClient, DISCOUNT);
-      assert.equal(r.toFreelancer, AMOUNT.toNumber() + BOND - DISCOUNT);
-      assert.equal((await only(claimSig, "KeyRevealed")).discount.toNumber(), DISCOUNT);
-      assert.equal((await only(claimSig, "Released")).discount.toNumber(), DISCOUNT);
-    });
-
-    it("a late key reveal does not cost the client the discount it earned by approving early", async () => {
-      const key = randomBytes(32);
-      const { escrow } = await open(LONG, 3600, 3600, AMOUNT, offer(4));
-      await markDelivered(escrow, freelancer, sha256(key));
-      await release(escrow); // within 4 s of the delivery
-      await waitPast(escrow, 6); // the early window is over before the key arrives
-      const r = await measure(escrow, () => claimWithKey(escrow, key));
-      assert.equal(r.toClient, DISCOUNT);
+      // The whole vault goes to the freelancer; the client gets nothing back.
+      assert.equal(r.toClient, 0);
+      assert.equal(r.toFreelancer, AMOUNT.toNumber() + BOND);
+      assert.equal((await only(claimSig, "KeyRevealed")).discount.toNumber(), 0);
+      assert.equal((await only(claimSig, "Released")).discount.toNumber(), 0);
+      assert.equal((await only(claimSig, "Released")).amount.toNumber(), AMOUNT.toNumber() + BOND);
     });
 
     it("approving after the early window earns no discount (open and sealed)", async () => {
