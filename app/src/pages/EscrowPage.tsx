@@ -334,7 +334,7 @@ export function EscrowPage({ address }: { address: string }) {
           accepted: now <= deadline ? `Twoje środki w skarbcu: ${amt}. Czekasz na dostawę.` : undefined,
           delivered:
             reviewEnd && now <= reviewEnd
-              ? esc.earlyDiscountBps > 0 && now <= earlyEnd
+              ? esc.earlyDiscountBps > 0 && !sealedOnChain && now <= earlyEnd
                 ? `Zatwierdź w oknie skonta, by odzyskać ${fromBase(esc.amount.muln(esc.earlyDiscountBps).divn(10000))}.`
                 : "Dostawa czeka na Twoją decyzję: zatwierdź albo odrzuć."
               : undefined,
@@ -421,7 +421,7 @@ export function EscrowPage({ address }: { address: string }) {
               {esc.earlyDiscountBps > 0 && (
                 <Def icon={Timer} label="Skonto za szybkie zatwierdzenie">
                   <span className="mono">{esc.earlyDiscountBps / 100}% ({fromBase(esc.amount.muln(esc.earlyDiscountBps).divn(10000))})</span>{" "}
-                  <span className="muted">w ciągu {countdown(esc.earlyWindowSecs.toNumber()).replace("minął", "0")} od dostawy</span>
+                  <span className="muted">w ciągu {countdown(esc.earlyWindowSecs.toNumber()).replace("minął", "0")} od dostawy; tylko dostawa jawna</span>
                 </Def>
               )}
               {hasHash && (

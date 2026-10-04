@@ -181,6 +181,8 @@ export function NewEscrow() {
           <label className="field">Kaucja obu stron (% kwoty)
             <input type="number" min={0} max={100} step={1} value={bondPct} onChange={(e) => setBondPct(e.target.value)} />
             <small>Zleceniobiorca wpłaca ją przy akceptacji, zleceniodawca przy odrzuceniu. Kto ustąpi w sporze, traci swoją.</small>
+            <small>Zarezerwuj środki na kaucję na wypadek odrzucenia.</small>
+            {Number(bondPct) === 0 && <small className="error">Bez kaucji odrzucenie i porzucenie są darmowe.</small>}
           </label>
           <div className="field">
             <label>Skonto za szybkie zatwierdzenie (opcjonalnie) — rabat % kwoty (0–10)
@@ -194,6 +196,7 @@ export function NewEscrow() {
                   </select>
                 </label>
                 <small>{earlyPreview}</small>
+                <small>Skonto dotyczy tylko dostawy jawnej, nie zapieczętowanej.</small>
               </>
             )}
             <small>Zleceniobiorca musi zaakceptować to skonto razem z resztą warunków.</small>

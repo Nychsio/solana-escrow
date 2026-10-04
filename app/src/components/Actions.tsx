@@ -10,6 +10,7 @@ import {
   Lightning,
   Prohibit,
   Scales,
+  Warning,
   Target,
   SealCheck,
   UserCheck,
@@ -101,13 +102,27 @@ export function Actions({ pda, esc, now, role, reload, vaultBal }: EscrowView) {
   const approvedAt = esc.approvedAt.toNumber();
   const reviewWin = esc.reviewWindowSecs.toNumber();
   const storedKey = loadKey(pda.toBase58());
+  // claim_with_key publishes the key. If the transaction then fails (e.g. refund_unrevealed lands first),
+  // the key would be public without payment. So we refuse to start when refund_unrevealed is close.
+  const reviewWinSecs = esc.reviewWindowSecs.toNumber();
+  const refundAt =
+    state === "approved"
+      ? approvedAt + reviewWinSecs
+      : esc.deliveredAt
+        ? esc.deliveredAt.toNumber() + 2 * reviewWinSecs
+        : Infinity;
+  const CLOSE_SECS = 120;
+  const tooClose = sealed && now > refundAt - CLOSE_SECS;
+  const tooCloseMsg = "Za blisko terminu — nieudana transakcja ujawniłaby klucz bez zapłaty";
   // Early-payment discount (skonto): terms are on the account, the window runs from delivered_at.
   const discBps = esc.earlyDiscountBps;
   const discAmount = esc.amount.muln(discBps).divn(10000);
   const earlyEnd = esc.deliveredAt ? esc.deliveredAt.toNumber() + esc.earlyWindowSecs.toNumber() : 0;
   const mmss = (secs: number) => `${String(Math.floor(secs / 60)).padStart(2, "0")}:${String(secs % 60).padStart(2, "0")}`;
   const discNote = (who: "client" | "other") =>
-    discBps > 0 && esc.deliveredAt ? (
+    discBps > 0 && esc.deliveredAt && sealed ? (
+      <p key="disc" className="muted">Skonto nie dotyczy dostawy zapieczętowanej.</p>
+    ) : discBps > 0 && esc.deliveredAt ? (
       now <= earlyEnd ? (
         <p key="disc">
           {who === "client" ? "Zatwierdź w ciągu " : "Skonto dla zleceniodawcy, jeśli zatwierdzi w ciągu "}
@@ -176,12 +191,42 @@ export function Actions({ pda, esc, now, role, reload, vaultBal }: EscrowView) {
       return;
     }
     const k = key;
+    // Re-check state and chain time right before signing (not just the rendered snapshot).
+    try {
+      const fresh = await program.account.escrow.fetch(pda);
+      const freshState = stateOf(fresh);
+      const t = await connection.getBlockTime(await connection.getSlot("confirmed"));
+      const nowFresh = t ?? Math.floor(Date.now() / 1000);
+      const fReview = fresh.reviewWindowSecs.toNumber();
+      const fRefundAt =
+        freshState === "approved"
+          ? fresh.approvedAt.toNumber() + fReview
+          : fresh.deliveredAt
+            ? fresh.deliveredAt.toNumber() + 2 * fReview
+            : Infinity;
+      const claimable =
+        freshState === "approved" ||
+        (freshState === "delivered" && !!fresh.deliveredAt && nowFresh > fresh.deliveredAt.toNumber() + fReview);
+      if (!claimable) {
+        setKeyErr("Stan umowy zmienił się — wypłata kluczem nie jest teraz możliwa. Odświeżam.");
+        await reload();
+        return;
+      }
+      if (nowFresh > fRefundAt - CLOSE_SECS) {
+        setKeyErr(tooCloseMsg);
+        return;
+      }
+    } catch (e) {
+      setKeyErr(`Nie udało się sprawdzić stanu umowy przed podpisem: ${(e as Error).message}`);
+      return;
+    }
     await exec("Ujawnienie klucza i wypłata (claim_with_key)", () =>
       program.methods
         .claimWithKey(Array.from(k))
         .accountsPartial({ caller: publicKey, escrow: pda, mint, vault, freelancerToken, clientToken, tokenProgram: TOKEN_PROGRAM_ID })
         .preInstructions([ensureAta(esc.freelancer, freelancerToken), ensureAta(esc.client, clientToken)])
-        .rpc()
+        // Always simulate first: a transaction that would fail must not reach the chain with the key inside.
+        .rpc({ skipPreflight: false })
     );
   };
   const refundUnrevealed = () =>
@@ -271,7 +316,7 @@ export function Actions({ pda, esc, now, role, reload, vaultBal }: EscrowView) {
       if (discBps > 0)
         items.push(
           <p key="terms">
-            Warunek skonta: zleceniodawca odzyska {discBps / 100}% kwoty ({fromBase(discAmount)}), jeśli zatwierdzi dostawę w ciągu {countdown(esc.earlyWindowSecs.toNumber()).replace("minął", "0m 0s")} od dostawy. Akceptując zlecenie, godzisz się na to.
+            Warunek skonta: zleceniodawca odzyska {discBps / 100}% kwoty ({fromBase(discAmount)}), jeśli zatwierdzi dostawę jawną w ciągu {countdown(esc.earlyWindowSecs.toNumber()).replace("minął", "0m 0s")} od dostawy (nie dotyczy dostawy zapieczętowanej). Akceptując zlecenie, godzisz się na to.
           </p>
         );
       items.push(
@@ -290,7 +335,8 @@ export function Actions({ pda, esc, now, role, reload, vaultBal }: EscrowView) {
   // Sealed delivery: the freelancer claims by revealing the key (browser copy or an uploaded .key).
   const claimKeyItem = (
     <div key="ck" className="act">
-      <Act kind="primary" icon={Key} label="Odbierz zapłatę (ujawnia klucz)" caption="claim_with_key · klucz staje się publiczny w transakcji" disabled={busy} onClick={claimWithKey} />
+      <Act kind="primary" icon={Key} label="Odbierz zapłatę (ujawnia klucz)" caption="claim_with_key · klucz staje się publiczny w transakcji" disabled={busy || tooClose} onClick={claimWithKey} />
+      {tooClose && <p className="error"><Warning size={18} weight="duotone" /> {tooCloseMsg}</p>}
       {storedKey ? (
         <span className="muted">Klucz znaleziony w tej przeglądarce.</span>
       ) : (
@@ -335,19 +381,19 @@ export function Actions({ pda, esc, now, role, reload, vaultBal }: EscrowView) {
       items.push(
         <Act key="rj" kind="danger" icon={Prohibit} label={`Odrzuć (wpłacasz kaucję ${bondTxt})`} caption="reject · podpisuje zleceniodawca" disabled={lacksBond} onClick={reject} />
       );
-      if (lacksBond) items.push(<p key="rj-msg" className="error">{lacksMsg}</p>);
+      if (lacksBond)
+        items.push(
+          <p key="rj-msg" className="error">
+            <Warning size={18} weight="duotone" /> <b>Nie masz środków na kaucję ({bondTxt}) — nie odrzucisz dostawy; po oknie zleceniobiorca dostanie wypłatę.</b>
+          </p>
+        );
     }
     if (isFreelancer && now <= reviewEnd) items.push(<p key="m">Czekasz na decyzję zleceniodawcy do końca okna akceptacji.</p>);
     if (isFreelancer && sealed && now > reviewEnd) items.push(claimKeyItem);
   }
   // ---- Approved (sealed only): the client approved, payout waits for the key ----
   if (state === "approved") {
-    if (discBps > 0 && esc.deliveredAt)
-      items.push(
-        <p key="disc" className="muted">
-          {approvedAt <= earlyEnd ? `Zatwierdzono w oknie skonta: ${fromBase(discAmount)} wróci do zleceniodawcy przy wypłacie.` : "Zatwierdzono po oknie skonta."}
-        </p>
-      );
+    if (discBps > 0) items.push(<p key="disc" className="muted">Skonto nie dotyczy dostawy zapieczętowanej.</p>);
     if (isFreelancer) items.push(claimKeyItem);
     else items.push(<p key="m">Zatwierdzone. Zleceniobiorca dostanie zapłatę dopiero po ujawnieniu klucza.</p>);
   }
@@ -367,15 +413,18 @@ export function Actions({ pda, esc, now, role, reload, vaultBal }: EscrowView) {
   // ---- Freelancer walking away (cancel_by_freelancer) ----
   if (isFreelancer && (state === "funded" || state === "accepted" || state === "delivered" || state === "approved")) {
     const abandoned = state === "accepted" && now > deadline;
-    const label = state === "funded" ? "Odrzuć zlecenie" : state === "delivered" || state === "approved" ? "Zrezygnuj (odzyskujesz kaucję)" : "Zrezygnuj";
-    const caption = abandoned
-      ? "cancel_by_freelancer · po terminie kaucja przepada na rzecz zleceniodawcy"
+    const forfeits = abandoned || state === "approved";
+    const label = state === "funded" ? "Odrzuć zlecenie" : state === "delivered" ? "Zrezygnuj (odzyskujesz kaucję)" : "Zrezygnuj";
+    const caption = forfeits
+      ? "cancel_by_freelancer · kaucja przepada na rzecz zleceniodawcy"
       : "cancel_by_freelancer · podpisuje zleceniobiorca";
     const text =
       state === "funded"
         ? "Zleceniodawca dostanie z powrotem całą kwotę. Nieodwracalne."
-        : abandoned
-          ? "Termin dostawy minął: zleceniodawca dostanie kwotę i Twoją kaucję. Nieodwracalne."
+        : forfeits
+          ? abandoned
+            ? "Termin dostawy minął: zleceniodawca dostanie kwotę i Twoją kaucję. Nieodwracalne."
+            : "Zleceniodawca już zatwierdził dostawę: rezygnując, oddajesz mu kwotę i tracisz swoją kaucję. Nieodwracalne."
           : "Odzyskasz własną kaucję, zleceniodawca dostanie resztę. Nieodwracalne.";
     items.push(
       pending === "cancel" ? (
