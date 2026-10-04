@@ -515,7 +515,11 @@ export function Actions({ pda, esc, now, role, reload, vaultBal }: EscrowView) {
   const live = items.filter(Boolean) as ReactElement[];
   const isMain = (el: ReactElement) =>
     el.key === "ck" || (el.props as { kind?: string })?.kind === "primary";
-  const mainIdx = live.findIndex(isMain);
+  // Once the deadline passed without delivery, the next step is the refund, not "pay now".
+  const overdue = (state === "funded" || state === "accepted") && now > deadline;
+  const refundIdx = overdue ? live.findIndex((el) => el.key === "rf") : -1;
+  // Observers have no "next step" card: all their (permissionless) actions stay in the Actions card.
+  const mainIdx = !role ? -1 : refundIdx >= 0 ? refundIdx : live.findIndex(isMain);
   const main = mainIdx >= 0 ? live[mainIdx] : null;
   const rest = live.filter((_, i) => i !== mainIdx);
   const finishedState = state === "released" || state === "refunded" || state === "settled" || state === "burned";

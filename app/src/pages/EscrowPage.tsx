@@ -156,7 +156,8 @@ export function EscrowPage({ address }: { address: string }) {
   // instruction name taken from the program logs. `closes` = some log line says CloseEscrow.
   const fetchHistory = useCallback(async (): Promise<HistItem[]> => {
     if (!pda) return [];
-    const sigs = await connection.getSignaturesForAddress(pda, { limit: 25 });
+    // "confirmed": the default (finalized) would hide a transaction for ~13 s after it was sent.
+    const sigs = await connection.getSignaturesForAddress(pda, { limit: 25 }, "confirmed");
     const txs = await connection.getTransactions(
       sigs.map((s) => s.signature),
       { maxSupportedTransactionVersion: 0, commitment: "confirmed" }
@@ -236,6 +237,8 @@ export function EscrowPage({ address }: { address: string }) {
   const reload = useCallback(async () => {
     await loadAccount();
     await loadHistory().catch(() => {});
+    // The RPC may still be indexing the new transaction: read the history once more shortly after.
+    setTimeout(() => loadHistory().catch(() => {}), 4000);
   }, [loadAccount, loadHistory]);
 
   useEffect(() => {
