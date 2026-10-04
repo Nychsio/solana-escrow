@@ -33,7 +33,7 @@ import { isZero } from "../seal";
 import { useTx } from "../tx";
 import { stateOf, useChainNow, useProgram, vaultOf, type EscrowAccount, type StateName } from "../program";
 
-type HistItem = { sig: string; ok: boolean; time: number | null; ix: string; closes: boolean; conceded: boolean; approved: boolean };
+type HistItem = { sig: string; ok: boolean; time: number | null; ix: string; closes: boolean; conceded: boolean; approved: boolean; discount: string | null };
 
 // Friendlier names for instructions whose log name alone is unclear.
 const IX_LABELS: Record<string, string> = {
@@ -97,6 +97,7 @@ function History({ items, onRefresh }: { items: HistItem[]; onRefresh: () => voi
         {items.map((h) => (
           <li key={h.sig}>
             <span className="muted">{h.time ? fmtDate(h.time) : "?"}</span>
+            {h.discount && <span className="muted">w tym skonto dla zleceniodawcy: {h.discount}</span>}
             <b>{h.approved ? "Zatwierdzenie — czeka na klucz (Release)" : h.conceded ? "Ustąpienie zleceniodawcy (Release)" : IX_LABELS[h.ix] ?? h.ix}{h.ok ? "" : " (błąd)"}</b>
             <a href={txUrl(h.sig)} target="_blank" rel="noreferrer">
               <span className="mono">{h.sig.slice(0, 12)}…</span>
@@ -166,10 +167,16 @@ export function EscrowPage({ address }: { address: string }) {
       // Released { conceded: true } = the client gave in from Frozen.
       let conceded = false;
       let approved = false;
+      let discount: string | null = null;
       try {
         for (const ev of parser.parseLogs(logs)) {
           if (ev.name === "released" && (ev.data as { conceded?: boolean }).conceded) conceded = true;
           if (ev.name === "approved") approved = true;
+          // Released / KeyRevealed carry the early-payment discount paid to the client.
+          if (ev.name === "released" || ev.name === "keyRevealed") {
+            const d = (ev.data as { discount?: { isZero(): boolean } }).discount;
+            if (d && !d.isZero()) discount = fromBase(d as never);
+          }
         }
       } catch {
         /* events unreadable: plain label */
@@ -182,6 +189,7 @@ export function EscrowPage({ address }: { address: string }) {
         closes: !s.err && logs.some((l) => l.includes("Instruction: CloseEscrow")),
         conceded,
         approved,
+        discount,
       };
     });
   }, [pda, connection, program]);
@@ -295,7 +303,7 @@ export function EscrowPage({ address }: { address: string }) {
   const revealed = !isZero(esc.revealedKey);
   const view: EscrowView = { pda, esc, now, role, reload, vaultBal };
 
-  const lead = {
+  const genericLead = {
     funded: now <= deadline ? "Środki są w skarbcu. Czekamy, aż zleceniobiorca przyjmie zlecenie i wpłaci kaucję." : "Termin minął, a zlecenie nie zostało przyjęte. Każdy może zwrócić środki zleceniodawcy.",
     accepted: now <= deadline ? "Zleceniobiorca przyjął zlecenie i wpłacił kaucję. Czekamy na dostawę." : "Termin dostawy minął. Każdy może zwrócić środki zleceniodawcy razem z kaucją zleceniobiorcy.",
     approved: "Zatwierdzone. Zleceniobiorca dostanie zapłatę dopiero po ujawnieniu klucza.",
@@ -306,7 +314,43 @@ export function EscrowPage({ address }: { address: string }) {
     settled: "Strony dogadały się. Skarbiec został podzielony.",
     burned: "Brak ugody. Środki zostały spalone.",
   }[state];
-  const roleLabel = role === "client" ? "zleceniodawca" : role === "freelancer" ? "zleceniobiorca" : "obserwator";
+  const roleLabel = role === "client" ? "Zleceniodawca" : role === "freelancer" ? "Zleceniobiorca" : "Obserwator";
+  const roleKey = role ?? "observer";
+  // One role- and state-dependent sentence for the hero; falls back to the generic state line.
+  const amt = fromBase(esc.amount);
+  const bondT = fromBase(esc.bondAmount);
+  const toCollect = fromBase(esc.amount.add(esc.bondAmount));
+  const earlyEnd = esc.deliveredAt ? esc.deliveredAt.toNumber() + esc.earlyWindowSecs.toNumber() : 0;
+  const reviewW = esc.reviewWindowSecs.toNumber();
+  const crankOpen =
+    ((state === "funded" || state === "accepted") && now > deadline) ||
+    (state === "delivered" && !!reviewEnd && now > reviewEnd) ||
+    (state === "approved" && now > esc.approvedAt.toNumber() + reviewW) ||
+    (state === "frozen" && !!disputeEnd && now > disputeEnd);
+  const roleLead: string | undefined =
+    role === "client"
+      ? {
+          funded: now <= deadline ? `Twoje środki w skarbcu: ${amt}. Czekasz na akceptację zleceniobiorcy.` : undefined,
+          accepted: now <= deadline ? `Twoje środki w skarbcu: ${amt}. Czekasz na dostawę.` : undefined,
+          delivered:
+            reviewEnd && now <= reviewEnd
+              ? esc.earlyDiscountBps > 0 && now <= earlyEnd
+                ? `Zatwierdź w oknie skonta, by odzyskać ${fromBase(esc.amount.muln(esc.earlyDiscountBps).divn(10000))}.`
+                : "Dostawa czeka na Twoją decyzję: zatwierdź albo odrzuć."
+              : undefined,
+          approved: "Zatwierdziłeś dostawę. Zapłata wyjdzie, gdy zleceniobiorca ujawni klucz.",
+        }[state as string]
+      : role === "freelancer"
+        ? {
+            funded: now <= deadline ? `Zlecenie czeka na Twoją akceptację. Kaucja do wpłaty: ${bondT}.` : undefined,
+            accepted: now <= deadline ? "Dostarcz pracę przed terminem." : undefined,
+            delivered: reviewEnd && now <= reviewEnd ? `Do odebrania po zatwierdzeniu: ${toCollect} (w tym Twoja kaucja ${bondT}).` : undefined,
+            approved: `Do odebrania po ujawnieniu klucza: ${toCollect} (w tym Twoja kaucja ${bondT}).`,
+          }[state as string]
+        : crankOpen
+          ? "Możesz wywołać akcje dostępne dla każdego."
+          : undefined;
+  const lead = roleLead ?? genericLead;
   const RoleIcon = role === "freelancer" ? Briefcase : User;
 
   const wasDelivered = !!esc.deliveredAt || state === "delivered";
@@ -328,14 +372,14 @@ export function EscrowPage({ address }: { address: string }) {
   const SI = STATE_ICON[state];
 
   return (
-    <div className="page">
+    <div className="page" data-role={roleKey}>
       <Hero
         overline="Umowa escrow"
         lead={lead}
         meta={
           <>
             <span className={`state big s-${state}`}><SI size={20} weight="duotone" />{STATE_PL[state]}</span>
-            <span className="role"><RoleIcon size={18} weight="duotone" />{roleLabel}</span>
+            <span className="role"><RoleIcon size={18} weight="duotone" />Widzisz jako: {roleLabel}</span>
           </>
         }
         after={
@@ -374,6 +418,12 @@ export function EscrowPage({ address }: { address: string }) {
                 <span className="mono big-num">{vaultBal ?? "?"}</span>{" "}
                 <Addr value={vaultOf(esc.mint, pda).toBase58()} />
               </Def>
+              {esc.earlyDiscountBps > 0 && (
+                <Def icon={Timer} label="Skonto za szybkie zatwierdzenie">
+                  <span className="mono">{esc.earlyDiscountBps / 100}% ({fromBase(esc.amount.muln(esc.earlyDiscountBps).divn(10000))})</span>{" "}
+                  <span className="muted">w ciągu {countdown(esc.earlyWindowSecs.toNumber()).replace("minął", "0")} od dostawy</span>
+                </Def>
+              )}
               {hasHash && (
                 <Def icon={LockKey} label="Tryb dostawy">
                   {sealedOnChain ? "zapieczętowana" : "jawna"}

@@ -122,6 +122,14 @@
         {
           "name": "expected_dispute_window_secs",
           "type": "u64"
+        },
+        {
+          "name": "expected_early_discount_bps",
+          "type": "u16"
+        },
+        {
+          "name": "expected_early_window_secs",
+          "type": "u64"
         }
       ]
     },
@@ -610,6 +618,13 @@
           "writable": true
         },
         {
+          "name": "client_token",
+          "docs": [
+            "Receives the early-payment discount (unused when no discount is owed)."
+          ],
+          "writable": true
+        },
+        {
           "name": "token_program"
         }
       ],
@@ -877,6 +892,14 @@
         {
           "name": "bond_bps",
           "type": "u16"
+        },
+        {
+          "name": "early_discount_bps",
+          "type": "u16"
+        },
+        {
+          "name": "early_window_secs",
+          "type": "u64"
         }
       ]
     },
@@ -1335,6 +1358,13 @@
           "writable": true
         },
         {
+          "name": "client_token",
+          "docs": [
+            "Receives the early-payment discount (unused when no discount is owed)."
+          ],
+          "writable": true
+        },
+        {
           "name": "token_program"
         }
       ],
@@ -1762,6 +1792,11 @@
       "code": 6024,
       "name": "NotSealed",
       "msg": "This delivery is not sealed"
+    },
+    {
+      "code": 6025,
+      "name": "InvalidDiscount",
+      "msg": "Invalid early-payment discount (at most 1000 bps, with a window no longer than the review window)"
     }
   ],
   "types": [
@@ -1784,6 +1819,13 @@
           },
           {
             "name": "conceded",
+            "type": "bool"
+          },
+          {
+            "name": "early",
+            "docs": [
+              "True when the approval falls inside the early-payment window (a discount will apply)."
+            ],
             "type": "bool"
           }
         ]
@@ -2008,6 +2050,18 @@
             "type": "i64"
           },
           {
+            "name": "early_discount_bps",
+            "docs": [
+              "Early-payment discount in basis points of `amount` (never of the bonds), at most",
+              "1000. It applies when the client approves within `early_window_secs` of delivery."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "early_window_secs",
+            "type": "u64"
+          },
+          {
             "name": "_reserved",
             "docs": [
               "Unused space left from the original 64 reserved bytes. New fields must be carved",
@@ -2016,7 +2070,7 @@
             "type": {
               "array": [
                 "u8",
-                37
+                27
               ]
             }
           }
@@ -2138,6 +2192,13 @@
                 32
               ]
             }
+          },
+          {
+            "name": "discount",
+            "docs": [
+              "Early-payment discount paid back to the client in this transaction (0 if none)."
+            ],
+            "type": "u64"
           }
         ]
       }
@@ -2204,11 +2265,21 @@
           },
           {
             "name": "amount",
+            "docs": [
+              "What the freelancer received (the vault minus the discount)."
+            ],
             "type": "u64"
           },
           {
             "name": "conceded",
             "type": "bool"
+          },
+          {
+            "name": "discount",
+            "docs": [
+              "Early-payment discount paid to the client in the same transaction (0 if none)."
+            ],
+            "type": "u64"
           }
         ]
       }

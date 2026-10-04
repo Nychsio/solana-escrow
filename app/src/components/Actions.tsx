@@ -10,6 +10,7 @@ import {
   Lightning,
   Prohibit,
   Scales,
+  Target,
   SealCheck,
   UserCheck,
   UserMinus,
@@ -23,9 +24,9 @@ import {
 } from "@solana/spl-token";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactElement } from "react";
 import { PL } from "../errors";
-import { fromBase } from "../format";
+import { countdown, fromBase } from "../format";
 import { bytesEqual, isZero, loadKey, parseKeyFile, sha256 } from "../seal";
 import { stateOf, useProgram, vaultOf } from "../program";
 import type { EscrowView } from "../pages/EscrowPage";
@@ -100,16 +101,33 @@ export function Actions({ pda, esc, now, role, reload, vaultBal }: EscrowView) {
   const approvedAt = esc.approvedAt.toNumber();
   const reviewWin = esc.reviewWindowSecs.toNumber();
   const storedKey = loadKey(pda.toBase58());
+  // Early-payment discount (skonto): terms are on the account, the window runs from delivered_at.
+  const discBps = esc.earlyDiscountBps;
+  const discAmount = esc.amount.muln(discBps).divn(10000);
+  const earlyEnd = esc.deliveredAt ? esc.deliveredAt.toNumber() + esc.earlyWindowSecs.toNumber() : 0;
+  const mmss = (secs: number) => `${String(Math.floor(secs / 60)).padStart(2, "0")}:${String(secs % 60).padStart(2, "0")}`;
+  const discNote = (who: "client" | "other") =>
+    discBps > 0 && esc.deliveredAt ? (
+      now <= earlyEnd ? (
+        <p key="disc">
+          {who === "client" ? "Zatwierdź w ciągu " : "Skonto dla zleceniodawcy, jeśli zatwierdzi w ciągu "}
+          <b className="mono">{mmss(earlyEnd - now)}</b>
+          {who === "client" ? ` → odzyskujesz ${fromBase(discAmount)}` : ` (kosztuje Cię ${fromBase(discAmount)}).`}
+        </p>
+      ) : (
+        <p key="disc" className="muted">Okno skonta minęło.</p>
+      )
+    ) : null;
 
   // accept_job: the expected_* arguments are the terms that were DISPLAYED to the freelancer in
   // this render (`esc` below is the render-time snapshot), not a fresh read of the account right
-  // before signing. A fresh read would adopt whatever the account holds at that moment, which
+  // before signing (this includes the early-payment discount terms). A fresh read would adopt whatever the account holds at that moment, which
   // defeats the check: if the terms changed after the user looked (e.g. the escrow was withdrawn
   // and re-created under the same id), the program must see the mismatch and answer TermsMismatch.
   const acceptJob = () =>
     exec(`Akceptacja zlecenia (kaucja ${bondTxt})`, () =>
       program.methods
-        .acceptJob(esc.amount, esc.bondAmount, esc.deadlineTs, esc.reviewWindowSecs, esc.disputeWindowSecs)
+        .acceptJob(esc.amount, esc.bondAmount, esc.deadlineTs, esc.reviewWindowSecs, esc.disputeWindowSecs, esc.earlyDiscountBps, esc.earlyWindowSecs)
         .accountsPartial({ freelancer: publicKey, escrow: pda, mint, vault, freelancerToken, tokenProgram: TOKEN_PROGRAM_ID })
         .preInstructions([ensureAta(esc.freelancer, freelancerToken)])
         .rpc()
@@ -127,8 +145,9 @@ export function Actions({ pda, esc, now, role, reload, vaultBal }: EscrowView) {
     exec(label, () =>
       program.methods
         .release()
-        .accountsPartial({ client: publicKey, escrow: pda, mint, vault, freelancerToken, tokenProgram: TOKEN_PROGRAM_ID })
-        .preInstructions([ensureAta(esc.freelancer, freelancerToken)])
+        // client_token receives the early-payment discount; the freelancer gets the rest.
+        .accountsPartial({ client: publicKey, escrow: pda, mint, vault, freelancerToken, clientToken, tokenProgram: TOKEN_PROGRAM_ID })
+        .preInstructions([ensureAta(esc.freelancer, freelancerToken), ensureAta(esc.client, clientToken)])
         .rpc()
     );
   // claim_if_silent and refund_if_late: any wallet may call (`caller`); the payout account is pinned
@@ -160,8 +179,8 @@ export function Actions({ pda, esc, now, role, reload, vaultBal }: EscrowView) {
     await exec("Ujawnienie klucza i wypłata (claim_with_key)", () =>
       program.methods
         .claimWithKey(Array.from(k))
-        .accountsPartial({ caller: publicKey, escrow: pda, mint, vault, freelancerToken, tokenProgram: TOKEN_PROGRAM_ID })
-        .preInstructions([ensureAta(esc.freelancer, freelancerToken)])
+        .accountsPartial({ caller: publicKey, escrow: pda, mint, vault, freelancerToken, clientToken, tokenProgram: TOKEN_PROGRAM_ID })
+        .preInstructions([ensureAta(esc.freelancer, freelancerToken), ensureAta(esc.client, clientToken)])
         .rpc()
     );
   };
@@ -249,6 +268,12 @@ export function Actions({ pda, esc, now, role, reload, vaultBal }: EscrowView) {
   // ---- Funded: waiting for the freelancer ----
   if (state === "funded") {
     if (isFreelancer && now <= deadline) {
+      if (discBps > 0)
+        items.push(
+          <p key="terms">
+            Warunek skonta: zleceniodawca odzyska {discBps / 100}% kwoty ({fromBase(discAmount)}), jeśli zatwierdzi dostawę w ciągu {countdown(esc.earlyWindowSecs.toNumber()).replace("minął", "0m 0s")} od dostawy. Akceptując zlecenie, godzisz się na to.
+          </p>
+        );
       items.push(
         <Act key="aj" kind="primary" icon={UserCheck} label={`Akceptuj zlecenie (wpłacasz kaucję ${bondTxt})`} caption="accept_job · podpisuje zleceniobiorca" disabled={lacksBond} onClick={acceptJob} />
       );
@@ -293,6 +318,8 @@ export function Actions({ pda, esc, now, role, reload, vaultBal }: EscrowView) {
 
   // ---- Delivered: the client decides ----
   if (state === "delivered") {
+    if (isClient) items.push(discNote("client"));
+    if (isFreelancer) items.push(discNote("other"));
     if (isClient)
       items.push(
         <Act
@@ -315,6 +342,12 @@ export function Actions({ pda, esc, now, role, reload, vaultBal }: EscrowView) {
   }
   // ---- Approved (sealed only): the client approved, payout waits for the key ----
   if (state === "approved") {
+    if (discBps > 0 && esc.deliveredAt)
+      items.push(
+        <p key="disc" className="muted">
+          {approvedAt <= earlyEnd ? `Zatwierdzono w oknie skonta: ${fromBase(discAmount)} wróci do zleceniodawcy przy wypłacie.` : "Zatwierdzono po oknie skonta."}
+        </p>
+      );
     if (isFreelancer) items.push(claimKeyItem);
     else items.push(<p key="m">Zatwierdzone. Zleceniobiorca dostanie zapłatę dopiero po ujawnieniu klucza.</p>);
   }
@@ -429,12 +462,28 @@ export function Actions({ pda, esc, now, role, reload, vaultBal }: EscrowView) {
     );
   }
 
-  if (!items.length && !dispute) return null;
+  // "Twój następny krok": the single main action for this role and state moves into its own card.
+  const live = items.filter(Boolean) as ReactElement[];
+  const isMain = (el: ReactElement) =>
+    el.key === "ck" || (el.props as { kind?: string })?.kind === "primary";
+  const mainIdx = live.findIndex(isMain);
+  const main = mainIdx >= 0 ? live[mainIdx] : null;
+  const rest = live.filter((_, i) => i !== mainIdx);
+  const finishedState = state === "released" || state === "refunded" || state === "settled" || state === "burned";
+  const nextCard =
+    role && (main || state !== "frozen") ? (
+      <Card icon={Target} title="Twój następny krok" className="next">
+        {main ? <fieldset disabled={busy} className="acts">{main}</fieldset> : <p>{finishedState ? "Nic do zrobienia — umowa zakończona." : "Nic do zrobienia — czekasz na drugą stronę."}</p>}
+      </Card>
+    ) : null;
+
+  if (!live.length && !dispute && !nextCard) return null;
   return (
     <>
-      {items.length > 0 && (
+      {nextCard}
+      {rest.length > 0 && (
         <Card icon={SealCheck} title="Akcje">
-          <fieldset disabled={busy} className="acts">{items}</fieldset>
+          <fieldset disabled={busy} className="acts">{rest}</fieldset>
         </Card>
       )}
       {dispute}

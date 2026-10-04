@@ -6,7 +6,7 @@ import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
 import { useEffect, useState } from "react";
 import { DEMO_MINT } from "../config";
-import { toBase } from "../format";
+import { fromBase, toBase } from "../format";
 import { escrowPda, useChainNow, useProgram, vaultOf } from "../program";
 import { useTx } from "../tx";
 
@@ -16,6 +16,11 @@ const REVIEW_PRESETS = [
   [86400, "24 h"],
   [3 * 86400, "3 dni"],
   [7 * 86400, "7 dni"],
+] as const;
+const EARLY_PRESETS = [
+  [300, "5 min"],
+  [86400, "24 h"],
+  [3 * 86400, "3 dni"],
 ] as const;
 const DISPUTE_PRESETS = [
   [120, "2 min (demo)"],
@@ -46,6 +51,8 @@ export function NewEscrow() {
   const [dispute, setDispute] = useState(120);
   const [bondPct, setBondPct] = useState("20");
   const [freezeWarn, setFreezeWarn] = useState(false);
+  const [discountPct, setDiscountPct] = useState("0");
+  const [earlyWindow, setEarlyWindow] = useState(300);
   const [balance, setBalance] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -92,6 +99,10 @@ export function NewEscrow() {
   const submit = async () => {
     setFormError(null);
     let freelancerPk: PublicKey, mintPk: PublicKey, amountBase: BN;
+    const dpct = Number(discountPct.replace(",", "."));
+    if (!Number.isFinite(dpct) || dpct < 0 || dpct > 10) return setFormError("Skonto: rabat musi być w zakresie 0–10%.");
+    const earlyBps = Math.round(dpct * 100);
+    if (earlyBps > 0 && earlyWindow > review) return setFormError("Okno skonta nie może być dłuższe niż okno akceptacji.");
     const pct = Number(bondPct.replace(",", "."));
     if (!Number.isFinite(pct) || pct < 0 || pct > 100) return setFormError("Kaucja musi być w zakresie 0–100%.");
     try {
@@ -113,7 +124,7 @@ export function NewEscrow() {
     const escrow = escrowPda(publicKey, id);
     const sig = await run("Utworzenie umowy (create)", () =>
       program.methods
-        .create(id, amountBase, new BN(deadlineTs), new BN(review), new BN(dispute), Math.round(pct * 100))
+        .create(id, amountBase, new BN(deadlineTs), new BN(review), new BN(dispute), Math.round(pct * 100), earlyBps, new BN(earlyBps > 0 ? earlyWindow : 0))
         .accountsPartial({
           client: publicKey,
           freelancer: freelancerPk,
@@ -128,6 +139,16 @@ export function NewEscrow() {
     if (sig) location.hash = `#/escrow/${escrow.toBase58()}`;
   };
 
+  // Preview of the early-approval discount: what the client gets back.
+  let earlyPreview = "";
+  try {
+    const amt = toBase(amount);
+    const bps = Math.round(Number(discountPct.replace(",", ".")) * 100);
+    const win = EARLY_PRESETS.find(([v]) => v === earlyWindow)?.[1] ?? `${earlyWindow} s`;
+    if (bps > 0) earlyPreview = `Zatwierdzisz w ${win} od dostawy → odzyskujesz ${fromBase(amt.muln(bps).divn(10000))} z ${fromBase(amt)}`;
+  } catch {
+    /* invalid amount: no preview */
+  }
   const plus = (secs: number) => setDeadline(toLocalInput(now + secs));
 
   return (
@@ -161,6 +182,22 @@ export function NewEscrow() {
             <input type="number" min={0} max={100} step={1} value={bondPct} onChange={(e) => setBondPct(e.target.value)} />
             <small>Zleceniobiorca wpłaca ją przy akceptacji, zleceniodawca przy odrzuceniu. Kto ustąpi w sporze, traci swoją.</small>
           </label>
+          <div className="field">
+            <label>Skonto za szybkie zatwierdzenie (opcjonalnie) — rabat % kwoty (0–10)
+              <input type="number" min={0} max={10} step={0.5} value={discountPct} onChange={(e) => setDiscountPct(e.target.value)} />
+            </label>
+            {Number(discountPct) > 0 && (
+              <>
+                <label>Okno skonta (od dostawy)
+                  <select value={earlyWindow} onChange={(e) => setEarlyWindow(Number(e.target.value))}>
+                    {EARLY_PRESETS.map(([v, l]) => <option key={v} value={v} disabled={v > review}>{l}{v > review ? " (dłuższe niż okno akceptacji)" : ""}</option>)}
+                  </select>
+                </label>
+                <small>{earlyPreview}</small>
+              </>
+            )}
+            <small>Zleceniobiorca musi zaakceptować to skonto razem z resztą warunków.</small>
+          </div>
           <div className="field-pair">
             <label className="field">Okno akceptacji
               <select value={review} onChange={(e) => setReview(Number(e.target.value))}>

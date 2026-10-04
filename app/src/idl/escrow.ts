@@ -128,6 +128,14 @@ export type Escrow = {
         {
           "name": "expectedDisputeWindowSecs",
           "type": "u64"
+        },
+        {
+          "name": "expectedEarlyDiscountBps",
+          "type": "u16"
+        },
+        {
+          "name": "expectedEarlyWindowSecs",
+          "type": "u64"
         }
       ]
     },
@@ -616,6 +624,13 @@ export type Escrow = {
           "writable": true
         },
         {
+          "name": "clientToken",
+          "docs": [
+            "Receives the early-payment discount (unused when no discount is owed)."
+          ],
+          "writable": true
+        },
+        {
           "name": "tokenProgram"
         }
       ],
@@ -883,6 +898,14 @@ export type Escrow = {
         {
           "name": "bondBps",
           "type": "u16"
+        },
+        {
+          "name": "earlyDiscountBps",
+          "type": "u16"
+        },
+        {
+          "name": "earlyWindowSecs",
+          "type": "u64"
         }
       ]
     },
@@ -1341,6 +1364,13 @@ export type Escrow = {
           "writable": true
         },
         {
+          "name": "clientToken",
+          "docs": [
+            "Receives the early-payment discount (unused when no discount is owed)."
+          ],
+          "writable": true
+        },
+        {
           "name": "tokenProgram"
         }
       ],
@@ -1768,6 +1798,11 @@ export type Escrow = {
       "code": 6024,
       "name": "notSealed",
       "msg": "This delivery is not sealed"
+    },
+    {
+      "code": 6025,
+      "name": "invalidDiscount",
+      "msg": "Invalid early-payment discount (at most 1000 bps, with a window no longer than the review window)"
     }
   ],
   "types": [
@@ -1790,6 +1825,13 @@ export type Escrow = {
           },
           {
             "name": "conceded",
+            "type": "bool"
+          },
+          {
+            "name": "early",
+            "docs": [
+              "True when the approval falls inside the early-payment window (a discount will apply)."
+            ],
             "type": "bool"
           }
         ]
@@ -2014,6 +2056,18 @@ export type Escrow = {
             "type": "i64"
           },
           {
+            "name": "earlyDiscountBps",
+            "docs": [
+              "Early-payment discount in basis points of `amount` (never of the bonds), at most",
+              "1000. It applies when the client approves within `early_window_secs` of delivery."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "earlyWindowSecs",
+            "type": "u64"
+          },
+          {
             "name": "reserved",
             "docs": [
               "Unused space left from the original 64 reserved bytes. New fields must be carved",
@@ -2022,7 +2076,7 @@ export type Escrow = {
             "type": {
               "array": [
                 "u8",
-                37
+                27
               ]
             }
           }
@@ -2144,6 +2198,13 @@ export type Escrow = {
                 32
               ]
             }
+          },
+          {
+            "name": "discount",
+            "docs": [
+              "Early-payment discount paid back to the client in this transaction (0 if none)."
+            ],
+            "type": "u64"
           }
         ]
       }
@@ -2210,11 +2271,21 @@ export type Escrow = {
           },
           {
             "name": "amount",
+            "docs": [
+              "What the freelancer received (the vault minus the discount)."
+            ],
             "type": "u64"
           },
           {
             "name": "conceded",
             "type": "bool"
+          },
+          {
+            "name": "discount",
+            "docs": [
+              "Early-payment discount paid to the client in the same transaction (0 if none)."
+            ],
+            "type": "u64"
           }
         ]
       }

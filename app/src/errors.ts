@@ -27,6 +27,7 @@ export const PL: Record<string, string> = {
   InvalidKey: "Klucz nie pasuje do hasha zapisanego w umowie (InvalidKey).",
   SealedDeliveryUseKey: "Dostawa jest zapieczętowana: odbierz zapłatę, ujawniając klucz.",
   NotSealed: "To nie jest dostawa zapieczętowana.",
+  InvalidDiscount: "Skonto: rabat maks. 10% kwoty, a okno skonta musi być dodatnie i nie dłuższe niż okno akceptacji.",
 };
 
 type AnyErr = {

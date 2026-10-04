@@ -337,3 +337,11 @@ input[type="range"] { padding: 0; accent-color: var(--accent); background: trans
   .acts { gap: 16px; }
   .brand { width: 100%; }
 }
+
+/* Role accents (observer / client / freelancer): hero top line, role pill dot, main-action card border. */
+.page[data-role="client"] { --role-accent: #1fb5a8; }
+.page[data-role="freelancer"] { --role-accent: #c8f51a; }
+.page[data-role="observer"] { --role-accent: #8a9a98; }
+.page[data-role] .hero { border-top: 3px solid var(--role-accent); }
+.hero .role::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--role-accent); border: 1px solid var(--on-light); }
+.card.next { border: 2px solid var(--role-accent, var(--accent)); }
