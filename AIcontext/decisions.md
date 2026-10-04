@@ -86,6 +86,11 @@ Format: `data | decyzja | dlaczego | kto`
 2026-10-04 | Pola skonta (u16 + u64 = 10 B) wzięte z _reserved (37 -> 27), rozmiar konta 307 B bez zmian; konta v2.2 czytają się poprawnie (zerowe skonto) | brak migracji, brak zamykania kont przed upgrade'em | Piotr
 2026-10-04 | demo-sealed.ts w formacie .sealed z aplikacji webowej (SEAL1, długość nazwy, nazwa, IV, szyfrogram z tagiem; deliverable_hash = SHA-256 całego pliku); nowe demo-early.ts | jeden format pliku w skryptach i froncie | Piotr
 2026-10-04 | Upgrade devnet v2.3: najpierw jawny extend o 14 512 B (więcej niż minimalne 10 240 B, po wcześniejszym odrzuceniu mniejszego), potem anchor deploy | .so urósł do 394 744 B | Piotr / Claude Code
+2026-10-04 | cancel_by_freelancer z Approved oddaje klientowi całe saldo, także kaucję wykonawcy (jak refund_unrevealed) | klient już zatwierdził sealed delivery, więc wycofanie się zamiast wydania klucza to niewydanie klucza; kara z refund_unrevealed nie może być do obejścia przez rezygnację (poprawia wcześniejsze: z Approved wykonawca odzyskiwał kaucję) | Piotr
+2026-10-04 | Skonto tylko dla dostawy jawnej: claim_with_key nigdy nie wypłaca rabatu (discount = 0), release przy zapieczętowanej tylko ustawia Approved (early = false) | rabat za szybkie zatwierdzenie pracy, której klient nie widział, przeczy zasadzie trybu zapieczętowanego (poprawia wcześniejsze: skonto liczone w claim_with_key z approved_at) | Piotr
+2026-10-04 | IDL bez zmian: pola discount w zdarzeniach, Approved.early i konto client_token w claim_with_key zostają (wartości zero / konto nieużywane); komentarze dokumentacyjne (///) przy polach i kontach NIE zostały zmienione, bo trafiają do IDL | front pracuje na IDL v2.3, sha256 target/idl/escrow.json przed i po identyczny (30c8ae11...c2a8); skutek: opisy IDL przy Approved.early i ClaimWithKey.client_token są lekko nieaktualne | Piotr / Claude Code
+2026-10-04 | Operacyjnie: claim_with_key wysyłać tylko z preflightem i nie na granicy terminu | nieudana transakcja też publikuje klucz w danych instrukcji | Piotr
+2026-10-04 | Zaplanowane (nie zrobione): kaucja klienta pobierana w create zamiast w reject | dziś klient bez tokenów nie może odrzucić dostawy; wymaga zmiany interfejsu, więc poza zamrożeniem przed --final | Piotr
 
 ## Użyte komponenty zewnętrzne (disclosure)
 - Solana (devnet), Solana CLI

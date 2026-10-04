@@ -23,6 +23,15 @@
 ## Blokery
 - Brak.
 
+## Zadanie 13: dwie poprawki logiki, ostatnia zmiana programu przed --final (2026-10-04)
+- Program (commit `145124a`): (1) `cancel_by_freelancer` z `Approved` oddaje klientowi całe saldo razem z kaucją wykonawcy; (2) `claim_with_key` nigdy nie płaci skonta, `release` zapieczętowanej tylko zatwierdza (`Approved.early = false`). `anchor test`: 94 zielone (zaktualizowane testy: cancel z `Approved`, skonto dla zapieczętowanej = 0; usunięty test spóźnionego klucza, który stracił sens).
+- **IDL bez zmian:** sha256 `target/idl/escrow.json` przed i po `30c8ae116faece9825dd981fc4251000ff4a386eac9db35c3017fcb6e881c2a8` (identyczny z `app/src/idl/escrow.json`), `target/types/escrow.ts` `f380379d221ad864de462c8fde0316f0e5c5ee11b43d2cd0e9eb7f61b7b0f04c` przed i po. Komentarze `///` przy polach i kontach celowo nie zmienione (trafiają do IDL), więc opisy `Approved.early` i `ClaimWithKey.client_token` w IDL są lekko nieaktualne.
+- Devnet = kod z `145124a`: slot upgrade'u 507208468, authority bez zmian (NIE odebrane), **bez `extend`** (`.so` 393 920 B < konto 396 792 B), pierwsze 393 920 B zrzutu = `target/deploy/escrow.so`, reszta zera, brak osieroconych buforów.
+- Saldo portfela dev: **przed 2,383046 SOL**, po upgrade'ie 2,380961 (koszt tylko opłaty, bufor zwrócony), po demo 2.380950982 SOL.
+- `demo:sealed` i `demo:early` przeszły na devnecie (11 transakcji `finalized`, linki w README, wiersze e i f); ścieżek a–d ta łatka nie dotyka, ich linki z wcześniejszego wydania v2.3 zostały.
+- main.md: ostrzeżenie, że nieudana `claim_with_key` też publikuje klucz (preflight, nie na granicy terminu); skonto tylko dla dostawy jawnej z powodem; sekcja „Co dalej” (kaucja klienta w `create`).
+- **Front może zostać na IDL v2.3** (interfejs bez zmian); zmieniło się tylko zachowanie: cancel z `Approved` zabiera wykonawcy kaucję (UI powinno to ostrzegać), a skonto dla zapieczętowanej nie występuje (UI nie powinno go obiecywać).
+
 ## Zadanie 12: skonto, v2.3 (2026-10-04)
 - Program (commit `559271e`): `early_discount_bps`/`early_window_secs` w koncie (z `_reserved`, rozmiar 307 B bez zmian), nowe argumenty `create` (na końcu) i `accept_job` (`expected_early_*`), skonto liczone tylko od `amount`, wypłacane klientowi w `release` (dostawa jawna w oknie) lub w `claim_with_key` (zapieczętowana, z `approved_at` vs `delivered_at`); nowe konto `client_token` w obu; nowy błąd `InvalidDiscount`; zdarzenia: `Released.discount`, `KeyRevealed.discount`, `Approved.early`. `anchor test`: 95 zielonych (86 + 9 nowych).
 - Devnet = v2.3 (kod z `559271e`): slot upgrade'u 507203791, authority bez zmian (NIE odebrane), konto programu 396 792 B (jawny `extend` o 14 512 B przed deployem), pierwsze 394 744 B zrzutu = `target/deploy/escrow.so`, reszta zera, brak osieroconych buforów. Upgrade przeszedł za pierwszym podejściem.
