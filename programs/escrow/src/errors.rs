@@ -40,4 +40,10 @@ pub enum ErrorCode {
     UnsupportedMint,
     #[msg("The escrow terms differ from what the freelancer agreed to")]
     TermsMismatch,
+    #[msg("Client and freelancer must be different wallets")]
+    SameParty,
+    #[msg("A deadline or window is longer than the 90 day maximum")]
+    WindowTooLong,
+    #[msg("Review window must be greater than zero")]
+    InvalidReviewWindow,
 }

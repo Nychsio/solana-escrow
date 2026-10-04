@@ -37,6 +37,8 @@ pub struct Escrow {
 const _: () = assert!(Escrow::INIT_SPACE == 235);
 
 pub const MAX_BPS: u16 = 10_000;
+/// Longest deadline (from now) and longest review or dispute window: 90 days.
+pub const MAX_WINDOW_SECS: i64 = 90 * 24 * 60 * 60;
 pub const SETTLE_NONE: u8 = 0;
 pub const SETTLE_CLIENT: u8 = 1;
 pub const SETTLE_FREELANCER: u8 = 2;

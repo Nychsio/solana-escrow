@@ -514,6 +514,57 @@ describe("escrow", () => {
       );
     });
 
+    it("rejects a client who names itself as the freelancer", async () => {
+      const id = new BN(nextId++);
+      const escrow = escrowPda(id);
+      const deadlineTs = (await chainNow()) + LONG;
+      await expectError(
+        program.methods
+          .create(id, AMOUNT, new BN(deadlineTs), new BN(3600), new BN(3600), 0)
+          .accountsPartial({
+            client: client.publicKey,
+            freelancer: client.publicKey,
+            mint,
+            clientToken,
+            escrow,
+            vault: vaultOf(escrow),
+            tokenProgram: TOKEN_PROGRAM_ID,
+          })
+          .signers([client])
+          .rpc(),
+        "SameParty"
+      );
+    });
+
+    it("rejects a zero review window", async () => {
+      const deadlineTs = (await chainNow()) + LONG;
+      await expectError(
+        create(new BN(nextId++), AMOUNT, deadlineTs, 0, 3600),
+        "InvalidReviewWindow"
+      );
+    });
+
+    it("rejects deadlines and windows longer than 90 days, accepts exactly 90", async () => {
+      const DAY = 24 * 60 * 60;
+      const now = await chainNow();
+      await expectError(
+        create(new BN(nextId++), AMOUNT, now + 91 * DAY, 3600, 3600),
+        "WindowTooLong"
+      );
+      await expectError(
+        create(new BN(nextId++), AMOUNT, now + LONG, 91 * DAY, 3600),
+        "WindowTooLong"
+      );
+      await expectError(
+        create(new BN(nextId++), AMOUNT, now + LONG, 3600, 91 * DAY),
+        "WindowTooLong"
+      );
+      // The limits themselves are allowed.
+      const id = new BN(nextId++);
+      await create(id, AMOUNT, now + 90 * DAY, 90 * DAY, 90 * DAY);
+      assert.deepEqual(await stateOf(escrowPda(id)), { funded: {} });
+    });
+
     it("rejects a zero dispute window", async () => {
       const deadlineTs = (await chainNow()) + LONG;
       await expectError(

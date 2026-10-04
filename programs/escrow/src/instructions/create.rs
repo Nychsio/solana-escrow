@@ -87,12 +87,26 @@ pub fn create(
 ) -> Result<()> {
     check_mint_supported(&ctx.accounts.mint.to_account_info())?;
     require!(amount > 0, ErrorCode::InvalidAmount);
+    require!(
+        ctx.accounts.freelancer.key() != ctx.accounts.client.key(),
+        ErrorCode::SameParty
+    );
+    require!(review_window_secs > 0, ErrorCode::InvalidReviewWindow);
     require!(dispute_window_secs > 0, ErrorCode::InvalidDisputeWindow);
     require!(bond_bps <= MAX_BPS, ErrorCode::InvalidBps);
     let bond_amount = u64::try_from(u128::from(amount) * u128::from(bond_bps) / u128::from(MAX_BPS))
         .map_err(|_| ErrorCode::InvalidBps)?;
     let now = Clock::get()?.unix_timestamp;
     require!(deadline_ts > now, ErrorCode::DeadlineInPast);
+    // Bounded terms keep absurd values (u64::MAX windows, a deadline decades away) out of
+    // escrows that someone else might be asked to accept.
+    let max_window = MAX_WINDOW_SECS as u64;
+    require!(
+        deadline_ts.saturating_sub(now) <= MAX_WINDOW_SECS
+            && review_window_secs <= max_window
+            && dispute_window_secs <= max_window,
+        ErrorCode::WindowTooLong
+    );
 
     ctx.accounts.escrow.set_inner(Escrow {
         client: ctx.accounts.client.key(),
