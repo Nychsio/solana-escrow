@@ -4,9 +4,9 @@ Escrow dla zleceń freelancerskich **bez arbitra**, na Solanie (Anchor). Warunki
 
 ## Stan
 
-Zaimplementowana pełna logika escrow v2 (instrukcje: `create`, `accept_job`, `withdraw`, `mark_delivered`, `request_revision`, `release`, `claim_if_silent`, `refund_if_late`, `cancel_by_freelancer`, `reject`, `propose_settlement`, `accept_settlement`, `burn_if_unsettled`, `close_escrow`): zgoda wykonawcy, kaucje obu stron, poprawki, sprawdzanie minta, zdarzenia na każdym przejściu i spór bez arbitra z decay.
+Zaimplementowana pełna logika escrow v2.1 (instrukcje: `create`, `accept_job`, `withdraw`, `mark_delivered`, `release`, `claim_if_silent`, `refund_if_late`, `cancel_by_freelancer`, `reject`, `propose_settlement`, `accept_settlement`, `burn_if_unsettled`, `close_escrow`): zgoda wykonawcy wiążąca warunki, kaucje obu stron, ustępowanie z `Frozen` przez obie strony, sprawdzanie minta, ograniczone terminy, zdarzenia na każdym przejściu i spór bez arbitra z decay. Poprawki (rewizje) zostały usunięte po audycie.
 
-Program v2 jest wdrożony na devnecie. Jeszcze nie zrobione: odebranie upgrade authority; frontend (`app/`) do dostosowania do nowego IDL.
+Kod v2.1 jest gotowy i przetestowany lokalnie; stan wdrożenia na devnecie opisuje sekcja „Devnet”. Jeszcze nie zrobione: odebranie upgrade authority; frontend (`app/`) do dostosowania do nowego IDL.
 
 ## Devnet
 
@@ -73,7 +73,7 @@ Dodatkowe ścieżki ze skryptów v1:
 | `programs/escrow/src/events.rs` | Zdarzenia emitowane przy każdym przejściu stanu |
 | `programs/escrow/src/instructions/dispute.rs` | `propose_settlement`, `accept_settlement`, `burn_if_unsettled` |
 | `programs/escrow/src/instructions/payout.rs` | `release`, `claim_if_silent`, `refund_if_late`, `cancel_by_freelancer` oraz `pay_from_vault` (jedyna funkcja wypłacająca ze skarbca) |
-| `scripts/` | Skrypty demo na devnecie: `demo-setup.ts` (portfele, mint, tokeny, portfel crank), `demo-lib.ts` (wspólne wywołania), `demo-flow.ts`, `demo-dispute.ts`, `demo-cancel.ts`, `demo-ghost.ts`, `demo-revision.ts`, `export-keys.ts` (klucze demo w base58 do Phantoma, tylko lokalnie) |
+| `scripts/` | Skrypty demo na devnecie: `demo-setup.ts` (portfele, mint, tokeny, portfel crank), `demo-lib.ts` (wspólne wywołania), `demo-flow.ts`, `demo-dispute.ts`, `demo-cancel.ts`, `demo-ghost.ts`, `export-keys.ts` (klucze demo w base58 do Phantoma, tylko lokalnie) |
 | `app/` | Frontend (Vite + React + TS + Wallet Adapter): czyta konta z chaina i buduje transakcje, bez backendu |
 | `tests/escrow.ts` | Testy wszystkich ścieżek na localnecie |
 | `Anchor.toml` | Konfiguracja workspace'u Anchor (klaster, portfel, skrypt testowy) |
@@ -84,15 +84,14 @@ Dodatkowe ścieżki ze skryptów v1:
 
 | Instrukcja | Kto podpisuje | Warunek | Skutek |
 |---|---|---|---|
-| `create` (+ `dispute_window_secs`, `bond_bps`, `max_revisions`, `revision_window_secs`) | klient | `amount > 0`, `dispute_window_secs > 0`, `deadline_ts > now`, `bond_bps <= 10000`, `max_revisions <= 10` (i okno > 0, gdy poprawki dozwolone), mint z białej listy | wpłata kwoty do skarbca, `Funded` (czeka na akceptację) |
-| `accept_job` | wykonawca | `Funded`, `now <= deadline_ts` | wpłata kaucji `amount * bond_bps / 10000` do skarbca, `Accepted` |
+| `create` (+ `dispute_window_secs`, `bond_bps`) | klient | `amount > 0`, klient i wykonawca to różne portfele (`SameParty`), `review_window_secs > 0`, `dispute_window_secs > 0`, `deadline_ts > now`, termin i okna <= 90 dni (`WindowTooLong`), `bond_bps <= 10000`, mint z białej listy | wpłata kwoty do skarbca, `Funded` (czeka na akceptację) |
+| `accept_job(expected_amount, expected_bond_amount, expected_deadline_ts, expected_review_window_secs, expected_dispute_window_secs)` | wykonawca | `Funded`, `now <= deadline_ts`, warunki na koncie równe tym, które wykonawca widział (`TermsMismatch`) | wpłata kaucji `amount * bond_bps / 10000` do skarbca, `Accepted` |
 | `withdraw` | klient | `Funded` (przed akceptacją) | całe saldo → klient, `Refunded` |
 | `mark_delivered(deliverable_hash)` | wykonawca | `Accepted`, `now <= deadline_ts` | zapis czasu i hasha dostawy, `Delivered` |
-| `request_revision` | klient | `Delivered`, w oknie akceptacji, `revisions_used < max_revisions` | `Accepted`, termin = max(termin, teraz + okno poprawki) |
-| `release` | klient | `Funded`, `Accepted` lub `Delivered` | całe saldo (kwota + kaucja wykonawcy) → wykonawca, `Released` |
+| `release` | klient | `Funded`, `Accepted`, `Delivered` lub `Frozen` | całe saldo → wykonawca, `Released`; z `Frozen` to ustąpienie klienta: wykonawca dostaje kwotę plus obie kaucje, propozycja ugody jest zerowana (zdarzenie z `conceded = true`) |
 | `claim_if_silent` | ktokolwiek | `Delivered`, `now > delivered_at + review_window_secs` | całe saldo → wykonawca (konto pinowane), `Released` |
 | `refund_if_late` | ktokolwiek | `Funded` lub `Accepted`, `now > deadline_ts` | całe saldo → klient (konto pinowane); z `Accepted` to kwota plus kaucja wykonawcy jako kara za ghosting, `Refunded` |
-| `cancel_by_freelancer` | wykonawca | `Funded`, `Accepted`, `Delivered` lub `Frozen` (bez warunków czasowych) | wykonawca odzyskuje własną kaucję (jeśli wpłacona), klient resztę, bez spalania, czyści propozycję ugody, `Refunded` |
+| `cancel_by_freelancer` | wykonawca | `Funded`, `Accepted`, `Delivered` lub `Frozen` | bez spalania, `Refunded`; z `Funded` klient dostaje wszystko; z `Accepted` przed terminem lub z `Delivered` wykonawca odzyskuje własną kaucję, a klient resztę; z `Accepted` po terminie (porzucenie) kaucja przepada na rzecz klienta; z `Frozen` to ustąpienie wykonawcy: całe saldo (kwota plus obie kaucje) → klient |
 | `reject` | klient | `Delivered`, `now <= delivered_at + review_window_secs` | klient wpłaca własną kaucję, `Frozen`, zapis `frozen_at` |
 | `propose_settlement(freelancer_bps)` | klient lub wykonawca | `Frozen`, `now <= frozen_at + dispute_window_secs`, `bps <= 10000` | zapis proponującego i podziału, nadpisuje poprzednią propozycję |
 | `accept_settlement(freelancer_bps)` | strona inna niż proponujący | `Frozen`, jest propozycja, `bps` = zapisany, w oknie sporu | najpierw spalany jest `saldo * elapsed / dispute_window_secs` (decay), z reszty wykonawca dostaje `reszta * bps / 10000`, klient resztę, `Settled` |
@@ -101,11 +100,12 @@ Dodatkowe ścieżki ze skryptów v1:
 
 - Konto `Escrow` to PDA z seedów `["escrow", client, id_u64]`. Skarbiec to konto tokenowe (ATA), którego authority jest to PDA.
 - PDA nie ma klucza prywatnego, więc wypłatę lub spalenie może podpisać tylko ten program (signer seeds, w jednym miejscu: `Escrow::with_signer_seeds`); wypłaty idą przez `pay_from_vault`.
-- Dual deposit: obie strony wpłacają kaucję (wykonawca przy `accept_job`, klient przy `reject`), więc ghosting i złośliwe odrzucenie kosztują, a nie są darmowe. Podstawa: Asgaonkar i Krishnamachari 2018, https://arxiv.org/abs/1806.08379.
-- Spór nie ma arbitra. Po `reject` środki (kwota plus dwie kaucje) są zamrożone, a strony mają okno (`dispute_window_secs`) na ugodę: jedna proponuje podział, druga go akceptuje, podając ten sam `bps`. Decay: im dłużej trwa spór, tym większa część skarbca ginie przy ugodzie (liniowo od 0% do 100% w oknie sporu). Bez ugody każdy może spalić środki (`burn_if_unsettled`), więc nikt, także autor, nie zyskuje na sporze. Wykonawca może w każdej chwili wycofać się przez `cancel_by_freelancer` i odzyskać własną kaucję.
+- Dual deposit: obie strony wpłacają kaucję (wykonawca przy `accept_job`, klient przy `reject`). Kaucja ma sens tylko dlatego, że w `Frozen` każda strona może ustąpić: klient przez `release`, wykonawca przez `cancel_by_freelancer`, i ustępujący traci swoją kaucję (druga strona dostaje wszystko). Ghosting po akceptacji też kosztuje: po terminie kaucja wykonawcy trafia do klienta, a `cancel_by_freelancer` po terminie jej nie zwraca. Podstawa: Asgaonkar i Krishnamachari 2018, https://arxiv.org/abs/1806.08379.
+- Spór nie ma arbitra. Po `reject` środki (kwota plus dwie kaucje) są zamrożone, a strony mają okno (`dispute_window_secs`) na ugodę: jedna proponuje podział, druga go akceptuje, podając ten sam `bps`. Decay: im dłużej trwa spór, tym większa część skarbca ginie przy ugodzie (liniowo od 0% do 100% w oknie sporu). Bez ugody każdy może spalić środki (`burn_if_unsettled`), więc nikt, także autor, nie zyskuje na sporze. Program nie wie, kto ma rację, i bez arbitra nikt tego nie rozstrzygnie; ogranicza tylko, ile można ugrać na kłamstwie, każe płacić za zwłokę i daje każdej stronie wyjście: ustąpić, dogadać się albo spalić wszystko.
 - `claim_if_silent` i `refund_if_late` może wywołać każdy portfel (crank); konto docelowe jest przypięte do wykonawcy lub klienta, więc obcy może tylko wysłać pieniądze do prawowitego właściciela.
-- `create` sprawdza mint. Klasyczny SPL Token jest dozwolony, Token-2022 tylko z rozszerzeniami metadata i group (biała lista, reszta odrzucana jako `UnsupportedMint`): nic nie może przenieść, opodatkować, zamrozić ani wstrzymać skarbca poza programem. Jawne ograniczenie: uprawnienie `freeze_authority` samego minta nie jest rozszerzeniem i nie blokuje (ma je np. USDC), więc emitent takiego tokena może zamrozić konto skarbca.
-- Na każdym przejściu stanu program emituje zdarzenie (`EscrowCreated`, `JobAccepted`, `Withdrawn`, `Delivered`, `RevisionRequested`, `Released`, `Refunded`, `Rejected`, `SettlementProposed`, `Settled`, `Burned`, `Cancelled`, `Closed`), więc historię można odtworzyć z logów transakcji.
+- `accept_job` niesie warunki, które wykonawca widział (kwota, kaucja, termin, okna). PDA zależy tylko od (klient, id), więc umowa wycofana, zamknięta i utworzona ponownie pod tym samym id miałaby ten sam adres i link, ale inne warunki; bez tej kontroli transakcja wykonawcy wylądowałaby na nowych warunkach (`TermsMismatch`).
+- `create` sprawdza mint. Klasyczny SPL Token jest dozwolony, Token-2022 tylko z rozszerzeniami metadata i group (biała lista, reszta odrzucana jako `UnsupportedMint`): nic nie może przenieść, opodatkować, zamrozić ani wstrzymać skarbca poza programem. Jawne ograniczenie: uprawnienie `freeze_authority` samego minta nie jest rozszerzeniem i nie blokuje (ma je np. USDC, którego emitent, Circle, może zamrozić dowolne konto tokenowe, także skarbiec), więc to ryzyko emitenta tokena, którego program nie usuwa.
+- Na każdym przejściu stanu program emituje zdarzenie (`EscrowCreated`, `JobAccepted`, `Withdrawn`, `Delivered`, `Released`, `Refunded`, `Rejected`, `SettlementProposed`, `Settled`, `Burned`, `Cancelled`, `Closed`), więc historię można odtworzyć z logów transakcji.
 - `Released`, `Refunded`, `Settled` i `Burned` są stanami końcowymi: przyjmuje je już tylko `close_escrow`.
 - Rozmiar konta `Escrow` jest stały (235 bajtów danych, pilnuje tego asercja w `state.rs`); nowe pola biorą się z `_reserved`, a nowy stan `Accepted` jest dopisany na końcu enuma, więc indeksy starszych stanów się nie zmieniły.
 - W programie nie ma klucza admina, instrukcji `update` ani konta uprzywilejowanego.

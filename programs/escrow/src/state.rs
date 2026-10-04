@@ -27,13 +27,17 @@ pub struct Escrow {
     pub settle_proposer: u8,
     /// Freelancer's share of the vault in basis points, as last proposed.
     pub settle_bps: u16,
-    /// Spare space (carved out of the original 64 bytes) so the account size never changes.
-    /// Each side's deposit (the freelancer's at accept_job, the client's at reject).
+    /// Size of each side's bond (`amount * bond_bps / 10000`, fixed at create). The
+    /// freelancer posts it in accept_job and the client matches it in reject, so the
+    /// vault holds amount + one bond after acceptance and amount + two bonds when Frozen.
     pub bond_amount: u64,
+    /// Unused space left from the original 64 reserved bytes. New fields must be carved
+    /// out of it so the account size (and every existing account) stays the same.
     pub _reserved: [u8; 37],
 }
 
-/// The account size shipped with the first dispute-ready layout; new fields must come out of `_reserved`.
+/// The account size shipped with the first dispute-ready layout; a new field must shrink
+/// `_reserved` by the same number of bytes, and this assertion fails the build if not.
 const _: () = assert!(Escrow::INIT_SPACE == 235);
 
 pub const MAX_BPS: u16 = 10_000;
@@ -57,8 +61,10 @@ pub enum EscrowState {
 }
 
 impl Escrow {
-    /// Single gate for every state check: an instruction lists the states it
-    /// accepts, anything else (including Frozen, which nobody lists) is rejected.
+    /// Single gate for every state check: an instruction lists the states it accepts and
+    /// anything else is rejected. Frozen is accepted by exactly four instructions
+    /// (propose_settlement, accept_settlement, burn_if_unsettled and the two concessions,
+    /// release and cancel_by_freelancer); the end states by none except close_escrow.
     pub fn require_state(&self, allowed: &[EscrowState]) -> Result<()> {
         require!(allowed.contains(&self.state), ErrorCode::InvalidState);
         Ok(())
