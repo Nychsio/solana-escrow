@@ -36,13 +36,13 @@ Maszyna stanów v2.3 (stany bez zmian względem v2.2; skonto to dodatkowe warunk
 10. `close_escrow` (klient, stany końcowe): spala ewentualne resztki w skarbcu (dust, bo każdy może wysłać tokeny na ATA) i zamyka skarbiec oraz konto `Escrow`, rent wraca do klienta.
 
 ### Skonto
-Klasyczne „2/10 net 30”: rabat dla klienta za szybkie rozliczenie. **Skonto dotyczy wyłącznie dostawy jawnej**: nagradza szybkie zatwierdzenie pracy, którą klient zobaczył. Przy dostawie zapieczętowanej klient zatwierdza pracę, której nie widział, więc rabat za pośpiech przeczyłby zasadzie tego trybu (zatwierdzenie na ślepo nie jest tym, co chcemy nagradzać). Wykonawca ustala w warunkach `early_discount_bps` (max 10% kwoty) i `early_window_secs` (nie dłuższe niż okno akceptacji) i akceptuje je świadomie w `accept_job` (każda różnica to `TermsMismatch`). Klient, który zatwierdzi dostawę w oknie (`approval_ts <= delivered_at + early_window_secs`), dostaje `amount * early_discount_bps / 10000` z powrotem, a reszta skarbca idzie do wykonawcy.
+Klasyczne „2/10 net 30”: rabat dla klienta za szybkie rozliczenie. **Skonto dotyczy wyłącznie dostawy jawnej**: nagradza szybkie zatwierdzenie pracy, którą klient zobaczył. Przy dostawie zapieczętowanej klient zatwierdza pracę, której nie widział, więc rabat za pośpiech przeczyłby zasadzie tego trybu (zatwierdzenie na ślepo nie jest tym, co chcemy nagradzać). Rabat ustala strona tworząca umowę, czyli klient w `create` (`early_discount_bps` do 10% kwoty i `early_window_secs` nie dłuższe niż okno akceptacji), a wykonawca go akceptuje, podpisując warunki w `accept_job` (każda różnica to `TermsMismatch`). Klient, który zatwierdzi dostawę w oknie (`approval_ts <= delivered_at + early_window_secs`), dostaje `amount * early_discount_bps / 10000` z powrotem, a reszta skarbca idzie do wykonawcy.
 
 - **Tylko od kwoty, nigdy od kaucji.** Zaokrąglenie w dół, więc ułamek zostaje u wykonawcy; suma wypłat zawsze równa saldu skarbca (zero zgubionych jednostek).
 - **Dostawa jawna:** `release` w `Delivered` w oknie wypłaca skonto klientowi i resztę wykonawcy w jednej transakcji (stąd nowe konto `client_token` w `release`).
 - **Dostawa zapieczętowana: bez skonta.** `release` tylko zatwierdza (`Approved`, zdarzenie z `early = false`), a `claim_with_key` wypłaca całe saldo wykonawcy (`discount = 0`). Pola `discount` w zdarzeniach i konto `client_token` w `claim_with_key` zostały w interfejsie dla zgodności z IDL (wartość zero, konto nieużywane).
 - **Bez skonta:** zatwierdzenie bez dostawy (`Funded`/`Accepted`), ustąpienie klienta z `Frozen` (także gdy mieści się w oknie: program rozpoznaje to po `frozen_at != 0`), `claim_if_silent`, klucz ujawniony po ciszy klienta, ugoda, zwroty i rezygnacja.
-- **Przykład:** „2/10 net 30” dla 1000 USDC: 2% to 20 USDC. Dla porównania odsetki 8% rocznie przez 14 dni to ok. 3 USDC (1000 × 0,08 × 14/365). Zapłata 20 dni przed terminem za 2% rabatu odpowiada ok. 37% rocznie, więc skonto jest dla wykonawcy drogim, ale świadomie wybranym kredytem i realną nagrodą dla klienta. Zamiennik faktoringu bez pośrednika i bez zewnętrznych protokołów („yield”).
+- **Przykład:** „2/10 net 30” dla 1000 USDC: 2% to 20 USDC. Dla porównania odsetki 8% rocznie przez 14 dni to ok. 3 USDC (1000 × 0,08 × 14/365). Zapłata 20 dni przed terminem za 2% rabatu odpowiada ok. 37% rocznie, więc skonto jest dla wykonawcy drogim kredytem, który świadomie akceptuje, podpisując warunki w `accept_job`, i realną nagrodą dla klienta. Zamiennik faktoringu bez pośrednika i bez zewnętrznych protokołów („yield”).
 - Skonto zmienia tylko to, ile kto dostaje przy wypłacie; kaucje i logika klucza działają jak w v2.2.
 
 ### Zapieczętowana dostawa
@@ -108,7 +108,7 @@ Rozmiar konta to 307 bajtów danych (pilnuje tego asercja w `state.rs`); pola sk
 
 Każda instrukcja sprawdza stan przez jedną funkcję `Escrow::require_state`. W `Frozen` działa pięć instrukcji (przy dostawie zapieczętowanej `release` tylko zatwierdza): `propose_settlement`, `accept_settlement`, `burn_if_unsettled` oraz dwa ustąpienia, `release` i `cancel_by_freelancer`.
 
-**Uprawnienia:** brak admina. Po deployu na devnet — odebrać upgrade authority (`solana program set-upgrade-authority --final`).
+**Uprawnienia:** brak admina. Upgrade authority odebrane (`solana program set-upgrade-authority --final`, 2026-10-04): program na devnecie jest niezmienny, ostatnie wdrożenie kodu w slocie 507218215.
 
 ## Plan zadań
 1. Szkielet repo + `create` + test — **zrobione**
@@ -117,7 +117,7 @@ Każda instrukcja sprawdza stan przez jedną funkcję `Escrow::require_state`. W
 2b. Escrow v2.1 (łatki po audycie): bez rewizji, `accept_job` wiąże warunki, porzucenie kosztuje, ustępowanie z `Frozen`, limity w `create` — **zrobione**, wdrożone na devnecie
 2c. Escrow v2.2: zapieczętowana dostawa (atomowa wymiana pieniędzy na klucz) — **zrobione**, wdrożone na devnecie
 2d. Escrow v2.3: skonto za szybkie zatwierdzenie dostawy — **zrobione**, wdrożone na devnecie
-3. Deploy na devnet, odebranie upgrade authority
+3. Deploy na devnet, odebranie upgrade authority — **zrobione** (2026-10-04)
 4. Frontend: połączenie portfela, widok klienta i wykonawcy
 5. (opcjonalnie) cecha wyróżniająca — do decyzji po MVP
 6. README, uzasadnienie, PDF (max 10 slajdów), wideo (max 3 min), nagranie zapasowe
@@ -134,15 +134,14 @@ Dwa portfele z SOL i tokenem testowym na devnecie. Pokazać ścieżkę z zatwier
 - Co gdy obie strony chcą się rozstać? → Klient może zwolnić wykonawcę przez `release` albo ugodę, a wykonawca sam oddaje swoją kaucję i resztę klientowi przez `cancel_by_freelancer` (stan `Refunded`, zero spalenia, w każdej chwili życia umowy). Traci tylko ten, kto podpisuje, więc nikt nie może tego wykorzystać przeciw drugiej stronie.
 - Co gdy jest spór? → Program nie wie, kto ma rację — bez arbitra nikt tego nie rozstrzygnie. Ogranicza, ile kłamca może ugrać, każe płacić za zwłokę i daje każdej stronie wyjście: ustąpić (tracąc kaucję), dogadać się albo spalić wszystko.
 - Jak zabezpieczyć klienta przed wykonawcą, który odbiera pieniądze i nie oddaje pracy (i odwrotnie)? → Wykonawca może zapieczętować dostawę: szyfruje pracę, a w programie zapisuje hash szyfrogramu i hash klucza. Pieniądze wypłaca wyłącznie transakcja, która ujawnia klucz (program sprawdza hash), więc klucz i pieniądze zamieniają się atomowo, a jeśli klucza nie ma, klient dostaje zwrot plus kaucję wykonawcy. Granica jest uczciwa: sprawiedliwa wymiana bez zaufanej trzeciej strony jest niemożliwa w ogólności (Pagnia i Gärtner 1999), więc przy dostawie zapieczętowanej klient ponosi ryzyko złej treści pod kluczem (ograniczone podglądem i kaucją wykonawcy), a przy jawnej wykonawca ryzyko złośliwego odrzucenia (ograniczone kaucjami).
-- Jak nagrodzić klienta za szybką płatność bez zewnętrznych protokołów? → Skonto „2/10 net 30” zapisane w programie: wykonawca świadomie oferuje do 10% kwoty (nigdy od kaucji) klientowi, który zatwierdzi dostawę w oknie, a rabat wypłaca ta sama transakcja, która zwalnia pieniądze. Skonto dotyczy tylko dostawy jawnej: przy zapieczętowanej klient zatwierdza pracę, której nie widział, więc nagradzanie pośpiechu przeczyłoby zasadzie tego trybu. To zamiennik faktoringu bez pośrednika, bez yieldu i bez oracle: nagroda wynika z warunków, które obie strony widziały.
+- Jak nagrodzić klienta za szybką płatność bez zewnętrznych protokołów? → Skonto „2/10 net 30” zapisane w programie: klient w `create` ustala rabat do 10% kwoty (nigdy od kaucji) za zatwierdzenie dostawy w oknie, wykonawca go akceptuje, podpisując warunki w `accept_job`, a rabat wypłaca ta sama transakcja, która zwalnia pieniądze. Skonto dotyczy tylko dostawy jawnej: przy zapieczętowanej klient zatwierdza pracę, której nie widział, więc nagradzanie pośpiechu przeczyłoby zasadzie tego trybu. To zamiennik faktoringu bez pośrednika, bez yieldu i bez oracle: nagroda wynika z warunków, które obie strony widziały (klient je ustalił, wykonawca podpisał).
 - Czemu nie każdy token? → Skarbiec musi być w pełni pod kontrolą programu. Token-2022 pozwala na rozszerzenia, które łamią to założenie: PermanentDelegate (ktoś może wyjąć środki), TransferHook (cudzy kod w każdym transferze), TransferFeeConfig (do skarbca trafia mniej niż kwota), Pausable i DefaultAccountState (zamrożenie), MintCloseAuthority i inne. Dlatego `create` stosuje białą listę i odrzuca wszystko poza metadanymi i grupami (`UnsupportedMint`). Jawne ograniczenie: `freeze_authority` minta nie blokuje `create`. Ma ją m.in. USDC (Circle może zamrozić dowolne konto tokenowe, także skarbiec umowy), więc to ryzyko emitenta tokena, którego program nie usuwa.
-- Czy autor może coś zmienić? → brak admina, upgrade authority odebrany.
+- Czy autor może coś zmienić? → Nie. Brak admina, brak instrukcji `update`, a upgrade authority zostało odebrane (`--final`) 2026-10-04: `solana program show 6KsiGDi8o9E1qNWxpzdew2CkDyQFqfeoLs79fAJ457D8 -u devnet` zwraca `Authority: none`, a ostatnie wdrożenie kodu miało miejsce w slocie 507218215. Każdy może to sprawdzić sam, a kod w Explorerze to dokładnie ten, który jest w repo (zrzut programu identyczny z `target/deploy/escrow.so`).
 - Dlaczego nie baza danych? → w bazie operator może cofnąć lub zablokować wypłatę; tu nikt.
 - Co za tydzień? → do uzupełnienia.
 
 ## Co dalej
 - **Kaucja klienta pobierana już w `create`.** Dziś klient wpłaca swoją kaucję dopiero w `reject`, więc klient bez tokenów nie może odrzucić dostawy (transakcja pada na braku środków), a wykonawca nie wie z góry, czy odrzucenie jest w ogóle możliwe. Pobranie kaucji klienta przy `create` zamyka tę lukę, ale zmienia kwotę wpłaty w `create` i ścieżki zwrotów (`withdraw`, `refund_*`), więc to osobna zmiana programu, poza obecnym zamrożeniem interfejsu.
-- Odebranie upgrade authority (`--final`) po tym wydaniu.
 
 ## Zgłoszenie (deadline 2026-10-04 23:00)
 Tytuł, nazwa zespołu, członkowie, opis z uzasadnieniem, PDF max 10 slajdów, wideo max 3 min (publiczny link), publiczne repo z README.

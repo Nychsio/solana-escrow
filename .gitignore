@@ -17,3 +17,13 @@ target/deploy/*.json
 
 # Local copy of a chat document
 Claude outputs/
+
+# Research and audit notes generated outside the repo (kept local)
+AIcontext/analiza_konkurencji_escrow.md
+AIcontext/audyt_bezpieczenstwa_solana.md
+AIcontext/audyt_v2.3_final.md
+AIcontext/claude_pelen_kontekst_badawczy.md
+AIcontext/gotowe_komponenty_solana.md
+AIcontext/wartosc_z_researchu.md
+AIcontext/zaawansowany_research.md
+Partner Task*/

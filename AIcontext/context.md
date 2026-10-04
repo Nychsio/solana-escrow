@@ -23,6 +23,11 @@
 ## Blokery
 - Brak.
 
+## Finał repo (2026-10-04)
+- **Upgrade authority odebrane** (`--final`): `solana program show` (przez Helius) zwraca `Authority: none`, `Last Deployed In Slot: 507218215`, 396 792 B. Programu nie da się już zmienić; stan: v2.3, front działa.
+- README i main.md: wszystkie wiersze „Upgrade authority” mówią „brak — odebrane (`--final`), 2026-10-04” z linkiem do Explorera; usunięte zdania o nieodebranym authority i o dostosowaniu frontu do IDL; skonto: rabat ustala klient w `create`, wykonawca akceptuje go w `accept_job`; odpowiedź dla jury o upgrade authority jest teraz prawdziwa.
+- `.gitignore`: lokalne notatki z researchu/audytów i folder „Partner Task*” poza repo.
+
 ## Zadanie 14: przejęcie łatki w payout.rs, twardy termin klucza (2026-10-04)
 - Program (commit `2d8b1ff`): (1) `cancel_by_freelancer` z zapieczętowanego `Delivered` po końcu okna akceptacji traci kaucję jak z `Approved`; (2) twardy termin klucza w `claim_with_key`, wspólny z `refund_unrevealed` przez `Escrow::key_deadline()` (+ `key_claimable`/`key_unclaimed`). Łatka z zewnętrznego audytu była niezacommitowana i bez testów; przejęta i przepisana (`unwrap_or(0)` -> `?`).
 - Testy: `anchor test` 101 zielonych (94 + 7 nowych: cancel sealed w oknie i po oknie, cancel jawnej po oknie, claim po terminie/refund (Approved i cichy klient), claim w oknie, pętla symulacji "dokładnie jedna z dwóch instrukcji"); 5 testów jednostkowych Rust dla granicy co do sekundy (`cargo test -p escrow --lib`). Istniejące testy z krótkim oknem klucza poszerzone (okno 8 s), bo claim musi zmieścić się w terminie.

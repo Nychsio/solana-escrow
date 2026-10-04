@@ -1,6 +1,7 @@
-// Early-payment discount on devnet ("2/10 net 30"): the freelancer offers 2% off the amount
-// if the client approves within the early window. create (discount terms) -> accept_job (the
-// freelancer signs the terms) -> mark_delivered (open) -> release inside the window -> close_escrow.
+// Early-payment discount on devnet ("2/10 net 30"): the client sets 2% off the amount in create
+// for an approval inside the early window, and the freelancer accepts it by signing the terms
+// in accept_job. create (discount terms) -> accept_job -> mark_delivered (open) -> release inside
+// the window -> close_escrow.
 import { connection, feeOf } from "./common";
 import {
   AMOUNT, BOND_BPS, Run, acceptJobCall, balanceOf, chainNow, closeCall, createCall, deliverCall,
