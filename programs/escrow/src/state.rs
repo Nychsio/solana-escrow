@@ -123,6 +123,32 @@ impl Escrow {
         Ok(delivered_at.saturating_add(window))
     }
 
+    /// Last moment (inclusive) at which a sealed delivery can still be unlocked with
+    /// claim_with_key; one second later refund_unrevealed takes over. Both instructions use
+    /// this one function, with claim open while `now <= deadline` and refund once
+    /// `now > deadline`, so the two windows neither overlap nor leave a gap.
+    /// - Approved: one review window after the approval.
+    /// - Delivered (the client stayed silent): one review window after the review window.
+    pub fn key_deadline(&self) -> Result<i64> {
+        let window = i64::try_from(self.review_window_secs).unwrap_or(i64::MAX);
+        match self.state {
+            EscrowState::Approved => Ok(self.approved_at.saturating_add(window)),
+            EscrowState::Delivered => Ok(self.review_ends_at()?.saturating_add(window)),
+            _ => err!(ErrorCode::InvalidState),
+        }
+    }
+
+    /// claim_with_key is allowed: the key deadline has not passed (`now <= deadline`).
+    pub fn key_claimable(&self, now: i64) -> Result<bool> {
+        Ok(now <= self.key_deadline()?)
+    }
+
+    /// refund_unrevealed is allowed: the key deadline has passed (`now > deadline`), the exact
+    /// complement of `key_claimable`, so at every second exactly one of the two applies.
+    pub fn key_unclaimed(&self, now: i64) -> Result<bool> {
+        Ok(now > self.key_deadline()?)
+    }
+
     /// Last moment (inclusive) for settlement while the escrow is Frozen.
     pub fn dispute_ends_at(&self) -> i64 {
         let window = i64::try_from(self.dispute_window_secs).unwrap_or(i64::MAX);
@@ -145,5 +171,82 @@ impl Escrow {
     pub fn with_signer_seeds<R>(&self, f: impl FnOnce(&[&[&[u8]]]) -> R) -> R {
         let id = self.id.to_le_bytes();
         f(&[&[ESCROW_SEED, self.client.as_ref(), id.as_ref(), &[self.bump]]])
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const WINDOW: u64 = 100;
+
+    fn sealed(state: EscrowState, delivered_at: i64, approved_at: i64) -> Escrow {
+        Escrow {
+            client: Pubkey::default(),
+            freelancer: Pubkey::default(),
+            mint: Pubkey::default(),
+            id: 0,
+            amount: 1_000,
+            deadline_ts: 0,
+            review_window_secs: WINDOW,
+            delivered_at: Some(delivered_at),
+            state,
+            bump: 0,
+            deliverable_hash: [1; 32],
+            dispute_window_secs: 1,
+            frozen_at: 0,
+            settle_proposer: SETTLE_NONE,
+            settle_bps: 0,
+            bond_amount: 0,
+            key_hash: [2; 32],
+            revealed_key: [0; 32],
+            approved_at,
+            early_discount_bps: 0,
+            early_window_secs: 0,
+            _reserved: [0; 27],
+        }
+    }
+
+    // Around the deadline exactly one of claim_with_key and refund_unrevealed applies: the
+    // last second of the key window belongs to the claim, the next one to the refund.
+    fn assert_boundary(e: &Escrow, deadline: i64) {
+        assert_eq!(e.key_deadline().unwrap(), deadline);
+        for now in (deadline - 5)..=(deadline + 5) {
+            let claim = e.key_claimable(now).unwrap();
+            let refund = e.key_unclaimed(now).unwrap();
+            assert_ne!(claim, refund, "overlap or gap at now = {now}");
+            assert_eq!(claim, now <= deadline, "claim at now = {now}");
+            assert_eq!(refund, now > deadline, "refund at now = {now}");
+        }
+        assert!(e.key_claimable(deadline).unwrap() && !e.key_unclaimed(deadline).unwrap());
+        assert!(!e.key_claimable(deadline + 1).unwrap() && e.key_unclaimed(deadline + 1).unwrap());
+    }
+
+    #[test]
+    fn approved_key_window_is_one_review_window_after_the_approval() {
+        let e = sealed(EscrowState::Approved, 1_000, 5_000);
+        assert_boundary(&e, 5_000 + WINDOW as i64);
+    }
+
+    #[test]
+    fn silent_client_key_window_is_one_review_window_after_the_review_window() {
+        // delivered at 1_000: review ends at 1_100, key deadline at 1_200.
+        let e = sealed(EscrowState::Delivered, 1_000, 0);
+        assert_eq!(e.review_ends_at().unwrap(), 1_100);
+        assert_boundary(&e, 1_200);
+    }
+
+    #[test]
+    fn key_deadline_only_exists_for_approved_and_delivered() {
+        for state in [EscrowState::Funded, EscrowState::Accepted, EscrowState::Frozen, EscrowState::Released] {
+            assert!(sealed(state, 1_000, 0).key_deadline().is_err());
+        }
+    }
+
+    #[test]
+    fn deadline_saturates_instead_of_overflowing() {
+        let mut e = sealed(EscrowState::Approved, 0, i64::MAX - 5);
+        e.review_window_secs = u64::MAX;
+        assert_eq!(e.key_deadline().unwrap(), i64::MAX);
     }
 }

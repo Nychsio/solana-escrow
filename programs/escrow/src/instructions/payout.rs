@@ -350,10 +350,12 @@ pub fn withdraw(ctx: Context<Withdraw>) -> Result<()> {
 ///   bond included, goes to the client (the mirror of the client's release);
 /// - from Accepted after the deadline it is abandonment, so the bond goes to the client
 ///   too (the same outcome as refund_if_late), otherwise quitting late would be free;
-/// - from `Approved` the client has already approved a sealed delivery, so backing out
-///   instead of revealing the key is withholding the key: the whole vault, bond
-///   included, goes to the client, exactly like refund_unrevealed. Otherwise the penalty
-///   for withholding the key could be sidestepped by cancelling.
+/// - from `Approved`, or from a sealed `Delivered` after the review window (a silent
+///   client: claim_with_key already works), backing out instead of revealing the key is
+///   withholding the key: the whole vault, bond included, goes to the client, exactly like
+///   refund_unrevealed. Otherwise the penalty for withholding the key could be sidestepped
+///   by cancelling. An open delivery, or a sealed one still inside its review window,
+///   returns the bond as before.
 pub fn cancel_by_freelancer(ctx: Context<CancelByFreelancer>) -> Result<()> {
     let escrow = &mut ctx.accounts.escrow;
     escrow.require_state(&[
@@ -368,7 +370,14 @@ pub fn cancel_by_freelancer(ctx: Context<CancelByFreelancer>) -> Result<()> {
     let freelancer_bond_paid = escrow.state != EscrowState::Funded;
     let abandoned = escrow.state == EscrowState::Accepted && now > escrow.deadline_ts;
     let conceded = escrow.state == EscrowState::Frozen;
-    let withheld_key = escrow.state == EscrowState::Approved;
+    // Backing out of a sealed delivery the client approved, or left unanswered past the
+    // review window (claim_with_key already works then), is withholding the key.
+    // delivered_at is always set in Delivered, so review_ends_at() cannot fail there.
+    let withheld_key = match escrow.state {
+        EscrowState::Approved => true,
+        EscrowState::Delivered => escrow.is_sealed() && now > escrow.review_ends_at()?,
+        _ => false,
+    };
     let freelancer_amount = if freelancer_bond_paid && !abandoned && !conceded && !withheld_key {
         escrow.bond_amount.min(vault_amount)
     } else {
@@ -409,10 +418,13 @@ pub fn claim_with_key(ctx: Context<ClaimWithKey>, key: [u8; 32]) -> Result<()> {
     let escrow = &mut ctx.accounts.escrow;
     escrow.require_state(&[EscrowState::Approved, EscrowState::Delivered])?;
     require!(escrow.is_sealed(), ErrorCode::NotSealed);
+    let now = Clock::get()?.unix_timestamp;
     if escrow.state == EscrowState::Delivered {
-        let now = Clock::get()?.unix_timestamp;
         require!(now > escrow.review_ends_at()?, ErrorCode::ReviewWindowOpen);
     }
+    // Hard deadline: after it the key buys the freelancer nothing (refund_unrevealed owns
+    // the vault from the next second on), and a failed transaction publishes it anyway.
+    require!(escrow.key_claimable(now)?, ErrorCode::ReviewWindowClosed);
     require!(
         solana_sha256_hasher::hash(&key).to_bytes() == escrow.key_hash,
         ErrorCode::InvalidKey
@@ -458,13 +470,7 @@ pub fn refund_unrevealed(ctx: Context<RefundUnrevealed>) -> Result<()> {
     escrow.require_state(&[EscrowState::Approved, EscrowState::Delivered])?;
     require!(escrow.is_sealed(), ErrorCode::NotSealed);
     let now = Clock::get()?.unix_timestamp;
-    let window = i64::try_from(escrow.review_window_secs).unwrap_or(i64::MAX);
-    let key_deadline = if escrow.state == EscrowState::Approved {
-        escrow.approved_at.saturating_add(window)
-    } else {
-        escrow.review_ends_at()?.saturating_add(window)
-    };
-    require!(now > key_deadline, ErrorCode::ReviewWindowOpen);
+    require!(escrow.key_unclaimed(now)?, ErrorCode::ReviewWindowOpen);
     escrow.state = EscrowState::Refunded;
 
     let amount = ctx.accounts.vault.amount;

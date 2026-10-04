@@ -1818,7 +1818,9 @@ describe("escrow", () => {
     });
 
     it("a silent client cannot block payment, but silence alone never pays a sealed delivery", async () => {
-      const { escrow, key } = await sealed(3);
+      // The key window after the review window is one more review window long, so keep it
+      // wide enough for the claim to land inside it.
+      const { escrow, key } = await sealed(8);
       await waitReviewEnd(escrow);
       await expectError(claimIfSilent(escrow), "SealedDeliveryUseKey");
 
@@ -2059,9 +2061,9 @@ describe("escrow", () => {
 
       // claim_with_key after a silent client (sealed): nothing was approved
       const key = randomBytes(32);
-      const sealedSilent = await open(LONG, 3, 3600, AMOUNT, offer(3));
+      const sealedSilent = await open(LONG, 8, 3600, AMOUNT, offer(3));
       await markDelivered(sealedSilent.escrow, freelancer, sha256(key));
-      await waitPast(sealedSilent.escrow, 3);
+      await waitPast(sealedSilent.escrow, 8);
       const r2 = await measure(sealedSilent.escrow, () => claimWithKey(sealedSilent.escrow, key));
       assert.equal(r2.toClient, 0);
 
@@ -2125,6 +2127,163 @@ describe("escrow", () => {
 
       await expectError(acceptJob(escrow, freelancer, freelancerToken, seen), "TermsMismatch");
       assert.deepEqual(await stateOf(escrow), { funded: {} });
+    });
+  });
+
+  describe("sealed key deadline", () => {
+    const BOND_BPS = 2000;
+    const BOND = (AMOUNT.toNumber() * BOND_BPS) / 10000; // 50_000_000
+    const bal = async (account: PublicKey) => Number(await balance(account));
+    const tick = () =>
+      provider.sendAndConfirm(
+        new Transaction().add(
+          SystemProgram.transfer({
+            fromPubkey: stranger.publicKey,
+            toPubkey: stranger.publicKey,
+            lamports: 1,
+          })
+        ),
+        [stranger]
+      );
+    // A delivery sealed under a fresh key; `review` is also the length of the key window.
+    const sealedDelivery = async (review: number, bondBps = BOND_BPS) => {
+      const key = randomBytes(32);
+      const { escrow } = await open(LONG, review, 3600, AMOUNT, { bondBps });
+      await markDelivered(escrow, freelancer, sha256(key));
+      return { escrow, key };
+    };
+    const deliveredAt = async (escrow: PublicKey) =>
+      ((await program.account.escrow.fetch(escrow)).deliveredAt as BN).toNumber();
+    const approvedAt = async (escrow: PublicKey) =>
+      (await program.account.escrow.fetch(escrow)).approvedAt.toNumber();
+
+    // What each side received while `action` ran, with the sum checked against the vault.
+    const payout = async (escrow: PublicKey, action: () => Promise<unknown>) => {
+      const vaultBefore = await bal(vaultOf(escrow));
+      const clientBefore = await bal(clientToken);
+      const freelancerBefore = await bal(freelancerToken);
+      await action();
+      const toClient = (await bal(clientToken)) - clientBefore;
+      const toFreelancer = (await bal(freelancerToken)) - freelancerBefore;
+      assert.equal(await balance(vaultOf(escrow)), "0");
+      assert.equal(toClient + toFreelancer, vaultBefore);
+      return { toClient, toFreelancer, vaultBefore };
+    };
+
+    it("cancel from a sealed Delivered inside the review window returns the freelancer's bond", async () => {
+      const { escrow } = await sealedDelivery(3600);
+      const r = await payout(escrow, () => cancel(escrow));
+      assert.equal(r.toFreelancer, BOND);
+      assert.equal(r.toClient, AMOUNT.toNumber());
+      assert.deepEqual(await stateOf(escrow), { refunded: {} });
+    });
+
+    it("cancel from a sealed Delivered after the review window (silent client) forfeits the bond", async () => {
+      const { escrow } = await sealedDelivery(3);
+      await waitUntilAfter((await deliveredAt(escrow)) + 3);
+      const r = await payout(escrow, () => cancel(escrow));
+      // The same outcome as refund_unrevealed: cancelling cannot sidestep that penalty.
+      assert.equal(r.toFreelancer, 0);
+      assert.equal(r.toClient, AMOUNT.toNumber() + BOND);
+      assert.deepEqual(await stateOf(escrow), { refunded: {} });
+    });
+
+    it("cancel from an open Delivered after the review window still returns the bond", async () => {
+      const { escrow } = await open(LONG, 3, 3600, AMOUNT, { bondBps: BOND_BPS });
+      await markDelivered(escrow);
+      await waitUntilAfter((await deliveredAt(escrow)) + 3);
+      const r = await payout(escrow, () => cancel(escrow));
+      assert.equal(r.toFreelancer, BOND);
+      assert.equal(r.toClient, AMOUNT.toNumber());
+    });
+
+    it("claim_with_key is refused after the key deadline, and refund_unrevealed takes over (approved)", async () => {
+      const { escrow, key } = await sealedDelivery(4);
+      await release(escrow);
+      // Inside the window the refund is not available yet.
+      await expectError(refundUnrevealed(escrow), "ReviewWindowOpen");
+      await waitUntilAfter((await approvedAt(escrow)) + 4); // the deadline has passed
+      await expectError(claimWithKey(escrow, key), "ReviewWindowClosed");
+      assert.deepEqual(await stateOf(escrow), { approved: {} });
+      const r = await payout(escrow, () => refundUnrevealed(escrow));
+      assert.equal(r.toClient, AMOUNT.toNumber() + BOND);
+      assert.equal(r.toFreelancer, 0);
+    });
+
+    it("claim_with_key is refused after the key deadline, and refund_unrevealed takes over (silent client)", async () => {
+      const { escrow, key } = await sealedDelivery(3);
+      const d = await deliveredAt(escrow);
+      await waitUntilAfter(d + 3); // review window over: the key window opens
+      await expectError(refundUnrevealed(escrow), "ReviewWindowOpen");
+      await waitUntilAfter(d + 3 + 3); // key window over as well
+      await expectError(claimWithKey(escrow, key), "ReviewWindowClosed");
+      const r = await payout(escrow, () => refundUnrevealed(escrow));
+      assert.equal(r.toClient, AMOUNT.toNumber() + BOND);
+      assert.equal(r.toFreelancer, 0);
+    });
+
+    it("claim_with_key still works inside the key window (approved and silent client)", async () => {
+      const a = await sealedDelivery(3600);
+      await release(a.escrow);
+      const r1 = await payout(a.escrow, () => claimWithKey(a.escrow, a.key));
+      assert.equal(r1.toFreelancer, AMOUNT.toNumber() + BOND);
+
+      const b = await sealedDelivery(8);
+      await waitUntilAfter((await deliveredAt(b.escrow)) + 8);
+      const r2 = await payout(b.escrow, () => claimWithKey(b.escrow, b.key));
+      assert.equal(r2.toFreelancer, AMOUNT.toNumber() + BOND);
+    });
+
+    it("at every moment exactly one of claim_with_key and refund_unrevealed is available, and they flip once", async () => {
+      const { escrow, key } = await sealedDelivery(4);
+      await release(escrow);
+      // Simulations must be signed by hand (Anchor's simulate() does not sign extra signers).
+      const wouldSucceed = async (builder: { transaction: () => Promise<Transaction> }) => {
+        const tx = await builder.transaction();
+        tx.feePayer = provider.wallet.publicKey;
+        tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+        tx.partialSign(stranger);
+        const signed = await provider.wallet.signTransaction(tx);
+        return (await connection.simulateTransaction(signed)).value.err === null;
+      };
+      const claimOk = () =>
+        wouldSucceed(
+          program.methods.claimWithKey(Array.from(key)).accountsPartial({
+            caller: stranger.publicKey,
+            escrow,
+            mint,
+            vault: vaultOf(escrow),
+            freelancerToken,
+            clientToken,
+            tokenProgram: TOKEN_PROGRAM_ID,
+          })
+        );
+      const refundOk = () =>
+        wouldSucceed(
+          program.methods.refundUnrevealed().accountsPartial({
+            caller: stranger.publicKey,
+            escrow,
+            mint,
+            vault: vaultOf(escrow),
+            clientToken,
+            tokenProgram: TOKEN_PROGRAM_ID,
+          })
+        );
+
+      const seen: string[] = [];
+      for (let i = 0; i < 40; i++) {
+        const c = await claimOk();
+        const r = await refundOk();
+        assert.notEqual(c, r, `overlap or gap: claim ${c}, refund ${r}`);
+        seen.push(c ? "claim" : "refund");
+        if (!c && seen.length > 1) break; // past the deadline
+        await sleep(400);
+        await tick(); // blocks (and the clock) advance only with transactions
+      }
+      assert.equal(seen[0], "claim");
+      assert.equal(seen[seen.length - 1], "refund");
+      // One flip, never back.
+      assert.equal(seen.filter((x, i) => i > 0 && x !== seen[i - 1]).length, 1);
     });
   });
 
