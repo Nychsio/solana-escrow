@@ -33,8 +33,22 @@ pub mod escrow {
         )
     }
 
-    pub fn accept_job(ctx: Context<AcceptJob>) -> Result<()> {
-        instructions::delivery::accept_job(ctx)
+    pub fn accept_job(
+        ctx: Context<AcceptJob>,
+        expected_amount: u64,
+        expected_bond_amount: u64,
+        expected_deadline_ts: i64,
+        expected_review_window_secs: u64,
+        expected_dispute_window_secs: u64,
+    ) -> Result<()> {
+        instructions::delivery::accept_job(
+            ctx,
+            expected_amount,
+            expected_bond_amount,
+            expected_deadline_ts,
+            expected_review_window_secs,
+            expected_dispute_window_secs,
+        )
     }
 
     pub fn withdraw(ctx: Context<Withdraw>) -> Result<()> {

@@ -38,4 +38,6 @@ pub enum ErrorCode {
     VaultNotEmpty,
     #[msg("This mint is not supported (Token-2022 extension outside the allow-list)")]
     UnsupportedMint,
+    #[msg("The escrow terms differ from what the freelancer agreed to")]
+    TermsMismatch,
 }

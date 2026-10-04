@@ -147,13 +147,41 @@ describe("escrow", () => {
     return { escrow, deadlineTs };
   };
 
-  const acceptJob = (
+  type Terms = {
+    amount: BN;
+    bondAmount: BN;
+    deadlineTs: BN;
+    reviewWindowSecs: BN;
+    disputeWindowSecs: BN;
+  };
+  const termsOf = async (escrow: PublicKey): Promise<Terms> => {
+    const a = await program.account.escrow.fetch(escrow);
+    return {
+      amount: a.amount,
+      bondAmount: a.bondAmount,
+      deadlineTs: a.deadlineTs,
+      reviewWindowSecs: a.reviewWindowSecs,
+      disputeWindowSecs: a.disputeWindowSecs,
+    };
+  };
+
+  // By default the freelancer accepts the terms currently on chain; the TermsMismatch
+  // tests pass the terms they "saw earlier" instead.
+  const acceptJob = async (
     escrow: PublicKey,
     signer = freelancer,
-    source = freelancerToken
-  ) =>
-    program.methods
-      .acceptJob()
+    source = freelancerToken,
+    terms?: Terms
+  ) => {
+    const t = terms ?? (await termsOf(escrow));
+    return program.methods
+      .acceptJob(
+        t.amount,
+        t.bondAmount,
+        t.deadlineTs,
+        t.reviewWindowSecs,
+        t.disputeWindowSecs
+      )
       .accountsPartial({
         freelancer: signer.publicKey,
         escrow,
@@ -164,6 +192,7 @@ describe("escrow", () => {
       })
       .signers([signer])
       .rpc();
+  };
 
   const withdraw = (escrow: PublicKey, signer = client) =>
     program.methods
@@ -1162,6 +1191,38 @@ describe("escrow", () => {
       const late = await open(4, 3600, 3600, AMOUNT, { accept: false });
       await waitUntilAfter(late.deadlineTs);
       await expectError(acceptJob(late.escrow), "DeadlinePassed");
+    });
+
+    it("accept_job refuses terms that changed since the freelancer looked", async () => {
+      // Withdraw, close and recreate under the same id: same PDA, same link, new deadline.
+      const id = new BN(nextId++);
+      const escrow = escrowPda(id);
+      await create(id, AMOUNT, (await chainNow()) + LONG, 3600, 3600, BOND_BPS);
+      const seen = await termsOf(escrow);
+      await withdraw(escrow);
+      await closeEscrow(escrow);
+      await create(id, AMOUNT, (await chainNow()) + LONG + 3600, 3600, 3600, BOND_BPS);
+
+      await expectError(acceptJob(escrow, freelancer, freelancerToken, seen), "TermsMismatch");
+      assert.deepEqual(await stateOf(escrow), { funded: {} });
+      assert.equal(await balance(vaultOf(escrow)), AMOUNT.toString());
+
+      // Each single term is bound, not just the deadline.
+      const now = await termsOf(escrow);
+      const variants: Terms[] = [
+        { ...now, amount: now.amount.addn(1) },
+        { ...now, bondAmount: now.bondAmount.addn(1) },
+        { ...now, deadlineTs: now.deadlineTs.addn(1) },
+        { ...now, reviewWindowSecs: now.reviewWindowSecs.addn(1) },
+        { ...now, disputeWindowSecs: now.disputeWindowSecs.addn(1) },
+      ];
+      for (const wrong of variants) {
+        await expectError(acceptJob(escrow, freelancer, freelancerToken, wrong), "TermsMismatch");
+      }
+
+      // The current terms go through.
+      await acceptJob(escrow, freelancer, freelancerToken, now);
+      assert.deepEqual(await stateOf(escrow), { accepted: {} });
     });
 
     it("the freelancer needs the tokens for the bond", async () => {

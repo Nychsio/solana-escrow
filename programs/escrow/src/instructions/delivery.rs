@@ -57,9 +57,27 @@ pub struct Reject<'info> {
 }
 
 /// Freelancer takes the job and puts up their bond; the client can no longer withdraw.
-pub fn accept_job(ctx: Context<AcceptJob>) -> Result<()> {
+/// The freelancer signs the exact terms they saw: the PDA address depends only on
+/// (client, id), so an escrow withdrawn, closed and recreated under the same id would
+/// otherwise silently land the freelancer on different terms.
+pub fn accept_job(
+    ctx: Context<AcceptJob>,
+    expected_amount: u64,
+    expected_bond_amount: u64,
+    expected_deadline_ts: i64,
+    expected_review_window_secs: u64,
+    expected_dispute_window_secs: u64,
+) -> Result<()> {
     let escrow = &mut ctx.accounts.escrow;
     escrow.require_state(&[EscrowState::Funded])?;
+    require!(
+        escrow.amount == expected_amount
+            && escrow.bond_amount == expected_bond_amount
+            && escrow.deadline_ts == expected_deadline_ts
+            && escrow.review_window_secs == expected_review_window_secs
+            && escrow.dispute_window_secs == expected_dispute_window_secs,
+        ErrorCode::TermsMismatch
+    );
     let now = Clock::get()?.unix_timestamp;
     require!(now <= escrow.deadline_ts, ErrorCode::DeadlinePassed);
     escrow.state = EscrowState::Accepted;
