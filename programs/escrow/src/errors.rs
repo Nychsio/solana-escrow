@@ -36,4 +36,6 @@ pub enum ErrorCode {
     SettlementMismatch,
     #[msg("Vault still holds tokens")]
     VaultNotEmpty,
+    #[msg("This mint is not supported (Token-2022 extension outside the allow-list)")]
+    UnsupportedMint,
 }

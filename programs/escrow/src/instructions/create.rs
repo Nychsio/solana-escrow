@@ -1,6 +1,10 @@
 use anchor_lang::prelude::*;
 use anchor_spl::{
     associated_token::AssociatedToken,
+    token_2022::spl_token_2022::{
+        self,
+        extension::{BaseStateWithExtensions, ExtensionType, StateWithExtensions},
+    },
     token_interface::{self, Mint, TokenAccount, TokenInterface, TransferChecked},
 };
 
@@ -13,6 +17,7 @@ pub struct Create<'info> {
     pub client: Signer<'info>,
     /// CHECK: only stored as the payout recipient; does not sign `create`.
     pub freelancer: UncheckedAccount<'info>,
+    #[account(mint::token_program = token_program)]
     pub mint: InterfaceAccount<'info, Mint>,
     #[account(
         mut,
@@ -43,6 +48,34 @@ pub struct Create<'info> {
     pub system_program: Program<'info, System>,
 }
 
+/// Token-2022 extensions the escrow tolerates. Everything else is refused (deny by
+/// default): it could move, freeze, tax or pause the vault behind the program's back.
+/// A plain freeze authority is not an extension and is accepted (USDC has one).
+const ALLOWED_EXTENSIONS: [ExtensionType; 6] = [
+    ExtensionType::MetadataPointer,
+    ExtensionType::TokenMetadata,
+    ExtensionType::GroupPointer,
+    ExtensionType::GroupMemberPointer,
+    ExtensionType::TokenGroup,
+    ExtensionType::TokenGroupMember,
+];
+
+fn check_mint_supported(mint: &AccountInfo) -> Result<()> {
+    // Classic SPL Token mints have no extensions.
+    if *mint.owner != spl_token_2022::ID {
+        return Ok(());
+    }
+    let data = mint.try_borrow_data()?;
+    let state = StateWithExtensions::<spl_token_2022::state::Mint>::unpack(&data)?;
+    for extension in state.get_extension_types()? {
+        require!(
+            ALLOWED_EXTENSIONS.contains(&extension),
+            ErrorCode::UnsupportedMint
+        );
+    }
+    Ok(())
+}
+
 pub fn create(
     ctx: Context<Create>,
     id: u64,
@@ -51,6 +84,7 @@ pub fn create(
     review_window_secs: u64,
     dispute_window_secs: u64,
 ) -> Result<()> {
+    check_mint_supported(&ctx.accounts.mint.to_account_info())?;
     require!(amount > 0, ErrorCode::InvalidAmount);
     require!(dispute_window_secs > 0, ErrorCode::InvalidDisputeWindow);
     let now = Clock::get()?.unix_timestamp;

@@ -1,12 +1,20 @@
 import * as anchor from "@anchor-lang/core";
 import { Program, BN } from "@anchor-lang/core";
 import {
+  createAssociatedTokenAccountIdempotentInstruction,
+  createInitializeMintInstruction,
+  createInitializePermanentDelegateInstruction,
+  createInitializeTransferFeeConfigInstruction,
   createMint,
+  ExtensionType,
   getAccount,
   getAssociatedTokenAddressSync,
+  getMintLen,
   getOrCreateAssociatedTokenAccount,
   mintTo,
+  TOKEN_2022_PROGRAM_ID,
   TOKEN_PROGRAM_ID,
+  transfer,
 } from "@solana/spl-token";
 import {
   Keypair,
@@ -843,6 +851,199 @@ describe("escrow", () => {
       );
       assert.equal(await balance(vaultOf(escrow)), AMOUNT.toString());
       assert.deepEqual(await stateOf(escrow), { funded: {} });
+    });
+  });
+
+  describe("mint validation and dust", () => {
+    // Creates a Token-2022 mint (client is the mint authority) with the given extensions.
+    const newMint2022 = async (
+      extensions: ExtensionType[],
+      init: (mint: PublicKey) => ReturnType<typeof createInitializeMintInstruction>[]
+    ) => {
+      const keypair = Keypair.generate();
+      const space = getMintLen(extensions);
+      const lamports = await connection.getMinimumBalanceForRentExemption(space);
+      const tx = new Transaction().add(
+        SystemProgram.createAccount({
+          fromPubkey: client.publicKey,
+          newAccountPubkey: keypair.publicKey,
+          space,
+          lamports,
+          programId: TOKEN_2022_PROGRAM_ID,
+        }),
+        ...init(keypair.publicKey),
+        createInitializeMintInstruction(
+          keypair.publicKey,
+          DECIMALS,
+          client.publicKey,
+          null,
+          TOKEN_2022_PROGRAM_ID
+        )
+      );
+      await provider.sendAndConfirm(tx, [client, keypair]);
+      return keypair.publicKey;
+    };
+
+    // Same call as `create`, but for an arbitrary mint and token program.
+    const createFor = async (mint2022: PublicKey, id: BN) => {
+      const clientAta = getAssociatedTokenAddressSync(
+        mint2022,
+        client.publicKey,
+        false,
+        TOKEN_2022_PROGRAM_ID
+      );
+      await provider.sendAndConfirm(
+        new Transaction().add(
+          createAssociatedTokenAccountIdempotentInstruction(
+            client.publicKey,
+            clientAta,
+            client.publicKey,
+            mint2022,
+            TOKEN_2022_PROGRAM_ID
+          )
+        ),
+        [client]
+      );
+      await mintTo(
+        connection,
+        client,
+        mint2022,
+        clientAta,
+        client,
+        MINTED,
+        [],
+        undefined,
+        TOKEN_2022_PROGRAM_ID
+      );
+      const escrow = escrowPda(id);
+      const deadlineTs = (await chainNow()) + LONG;
+      await program.methods
+        .create(id, AMOUNT, new BN(deadlineTs), new BN(3600), new BN(3600))
+        .accountsPartial({
+          client: client.publicKey,
+          freelancer: freelancer.publicKey,
+          mint: mint2022,
+          clientToken: clientAta,
+          escrow,
+          vault: getAssociatedTokenAddressSync(
+            mint2022,
+            escrow,
+            true,
+            TOKEN_2022_PROGRAM_ID
+          ),
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .signers([client])
+        .rpc();
+      return { escrow, clientAta };
+    };
+
+    it("rejects a Token-2022 mint with PermanentDelegate", async () => {
+      const bad = await newMint2022(
+        [ExtensionType.PermanentDelegate],
+        (m) => [
+          createInitializePermanentDelegateInstruction(
+            m,
+            stranger.publicKey,
+            TOKEN_2022_PROGRAM_ID
+          ),
+        ]
+      );
+      await expectError(createFor(bad, new BN(nextId++)), "UnsupportedMint");
+    });
+
+    it("rejects a Token-2022 mint with TransferFeeConfig", async () => {
+      const bad = await newMint2022(
+        [ExtensionType.TransferFeeConfig],
+        (m) => [
+          createInitializeTransferFeeConfigInstruction(
+            m,
+            client.publicKey,
+            client.publicKey,
+            100,
+            BigInt(1_000_000),
+            TOKEN_2022_PROGRAM_ID
+          ),
+        ]
+      );
+      await expectError(createFor(bad, new BN(nextId++)), "UnsupportedMint");
+    });
+
+    it("accepts a plain Token-2022 mint and pays out on release", async () => {
+      const good = await newMint2022([], () => []);
+      const id = new BN(nextId++);
+      const { escrow } = await createFor(good, id);
+      const vault = getAssociatedTokenAddressSync(
+        good,
+        escrow,
+        true,
+        TOKEN_2022_PROGRAM_ID
+      );
+      const freelancerAta = getAssociatedTokenAddressSync(
+        good,
+        freelancer.publicKey,
+        false,
+        TOKEN_2022_PROGRAM_ID
+      );
+      await provider.sendAndConfirm(
+        new Transaction().add(
+          createAssociatedTokenAccountIdempotentInstruction(
+            client.publicKey,
+            freelancerAta,
+            freelancer.publicKey,
+            good,
+            TOKEN_2022_PROGRAM_ID
+          )
+        ),
+        [client]
+      );
+
+      await program.methods
+        .release()
+        .accountsPartial({
+          client: client.publicKey,
+          escrow,
+          mint: good,
+          vault,
+          freelancerToken: freelancerAta,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .signers([client])
+        .rpc();
+
+      const paid = await getAccount(
+        connection,
+        freelancerAta,
+        undefined,
+        TOKEN_2022_PROGRAM_ID
+      );
+      assert.equal(paid.amount.toString(), AMOUNT.toString());
+      assert.deepEqual(await stateOf(escrow), { released: {} });
+    });
+
+    it("close_escrow burns dust sent to the vault after the payout", async () => {
+      const { escrow } = await open(LONG, 3600);
+      await release(escrow);
+      // Anyone can send tokens to an associated token account.
+      await transfer(
+        connection,
+        client,
+        clientToken,
+        vaultOf(escrow),
+        client,
+        7
+      );
+      assert.equal(await balance(vaultOf(escrow)), "7");
+      const supplyBefore = (await getMint(connection, mint)).supply;
+
+      await closeEscrow(escrow);
+
+      assert.equal(
+        (await getMint(connection, mint)).supply.toString(),
+        (supplyBefore - BigInt(7)).toString()
+      );
+      assert.isNull(await connection.getAccountInfo(escrow));
+      assert.isNull(await connection.getAccountInfo(vaultOf(escrow)));
     });
   });
 

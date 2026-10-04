@@ -1,5 +1,7 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{self, CloseAccount, Mint, TokenAccount, TokenInterface};
+use anchor_spl::token_interface::{
+    self, Burn, CloseAccount, Mint, TokenAccount, TokenInterface,
+};
 
 use crate::{errors::ErrorCode, state::*};
 
@@ -15,6 +17,8 @@ pub struct CloseEscrow<'info> {
         has_one = mint,
     )]
     pub escrow: Account<'info, Escrow>,
+    /// Mutable because leftover dust is burned.
+    #[account(mut)]
     pub mint: InterfaceAccount<'info, Mint>,
     #[account(
         mut,
@@ -26,7 +30,9 @@ pub struct CloseEscrow<'info> {
     pub token_program: Interface<'info, TokenInterface>,
 }
 
-/// Reclaims the rent once the escrow is over and the vault is empty.
+/// Reclaims the rent once the escrow is over. Anyone can send tokens to an
+/// associated token account, so a vault may hold dust after the payout; that
+/// dust is burned (nobody can claim it) so it cannot block the close.
 pub fn close_escrow(ctx: Context<CloseEscrow>) -> Result<()> {
     ctx.accounts.escrow.require_state(&[
         EscrowState::Released,
@@ -34,7 +40,20 @@ pub fn close_escrow(ctx: Context<CloseEscrow>) -> Result<()> {
         EscrowState::Settled,
         EscrowState::Burned,
     ])?;
-    require!(ctx.accounts.vault.amount == 0, ErrorCode::VaultNotEmpty);
+
+    let dust = ctx.accounts.vault.amount;
+    if dust > 0 {
+        let cpi_accounts = Burn {
+            mint: ctx.accounts.mint.to_account_info(),
+            from: ctx.accounts.vault.to_account_info(),
+            authority: ctx.accounts.escrow.to_account_info(),
+        };
+        ctx.accounts.escrow.with_signer_seeds(|seeds| {
+            let cpi_ctx =
+                CpiContext::new_with_signer(ctx.accounts.token_program.key(), cpi_accounts, seeds);
+            token_interface::burn(cpi_ctx, dust)
+        })?;
+    }
 
     let cpi_accounts = CloseAccount {
         account: ctx.accounts.vault.to_account_info(),
