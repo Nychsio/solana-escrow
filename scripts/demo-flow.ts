@@ -1,122 +1,37 @@
-// Happy path on devnet: create -> mark_delivered -> release, one Explorer link per transaction.
-import * as anchor from "@anchor-lang/core";
-import { BN, Program } from "@anchor-lang/core";
-import { createHash } from "crypto";
+// Happy path on devnet: create -> accept_job -> mark_delivered -> release, with 20% bonds.
 import {
-  TOKEN_PROGRAM_ID,
-  getAccount,
-  getAssociatedTokenAddressSync,
-} from "@solana/spl-token";
-import { PublicKey } from "@solana/web3.js";
-import * as fs from "fs";
-import * as path from "path";
-import {
-  ROOT,
-  connection,
-  loadKeypair,
-  readMint,
-  txLink,
-  verifySignatures,
-} from "./common";
-import * as common from "./common";
-import { Escrow } from "../target/types/escrow";
-
-const AMOUNT = new BN(100_000_000); // 100 tokens at 6 decimals
-const DEADLINE_SECS = 600;
-const REVIEW_WINDOW_SECS = 60;
-const DISPUTE_WINDOW_SECS = 120;
+  AMOUNT, Run, acceptJobCall, balanceOf, createCall, chainNow, deliverCall,
+  loadContext, newEscrow, releaseCall, tokens,
+} from "./demo-lib";
+import { getAccount } from "@solana/spl-token";
+import { connection } from "./common";
 
 async function main() {
-  const mint = readMint();
-  if (!mint) throw new Error("No demo mint found. Run `yarn demo:setup` first.");
-  const client = loadKeypair(path.join(common.KEYS_DIR, "client.json"));
-  const freelancer = loadKeypair(path.join(common.KEYS_DIR, "freelancer.json"));
+  const ctx = loadContext();
+  const e = newEscrow(ctx);
+  const run = new Run();
+  console.log("escrow", e.escrow.toBase58());
 
-  const provider = new anchor.AnchorProvider(
-    connection,
-    new anchor.Wallet(client),
-    { commitment: "confirmed" }
-  );
-  const idl = JSON.parse(
-    fs.readFileSync(path.join(ROOT, "target/idl/escrow.json"), "utf8")
-  );
-  const program = new Program<Escrow>(idl, provider);
+  const clientStart = await balanceOf(ctx.clientToken);
+  const freelancerStart = await balanceOf(ctx.freelancerToken);
+  const deadlineTs = (await chainNow()) + 600;
 
-  const id = new BN(Date.now());
-  const [escrow] = PublicKey.findProgramAddressSync(
-    [Buffer.from("escrow"), client.publicKey.toBuffer(), id.toArrayLike(Buffer, "le", 8)],
-    program.programId
-  );
-  const vault = getAssociatedTokenAddressSync(mint, escrow, true);
-  const clientToken = getAssociatedTokenAddressSync(mint, client.publicKey);
-  const freelancerToken = getAssociatedTokenAddressSync(mint, freelancer.publicKey);
+  await run.step("create", createCall(ctx, e, { deadlineTs, review: 120, dispute: 120 }));
+  console.log("   vault (amount)       ", tokens(await balanceOf(e.vault)));
+  await run.step("accept_job", acceptJobCall(ctx, e));
+  console.log("   vault (+ freelancer bond)", tokens(await balanceOf(e.vault)));
+  await run.step("mark_delivered", deliverCall(ctx, e));
+  await run.step("release", releaseCall(ctx, e));
 
-  console.log("program   ", program.programId.toBase58());
-  console.log("escrow    ", escrow.toBase58());
-  console.log("vault     ", vault.toBase58());
-
-  // Deadlines are checked against the cluster clock, not this machine's.
-  const chainNow = (await connection.getBlockTime(await connection.getSlot()))!;
-
-  const createSig = await program.methods
-    .create(
-      id,
-      AMOUNT,
-      new BN(chainNow + DEADLINE_SECS),
-      new BN(REVIEW_WINDOW_SECS),
-      new BN(DISPUTE_WINDOW_SECS)
-    )
-    .accountsPartial({
-      client: client.publicKey,
-      freelancer: freelancer.publicKey,
-      mint,
-      clientToken,
-      escrow,
-      vault,
-      tokenProgram: TOKEN_PROGRAM_ID,
-    })
-    .signers([client])
-    .rpc();
-  console.log("\n1. create          ", txLink(createSig));
-  console.log("   vault balance   ", (await getAccount(connection, vault)).amount.toString());
-
-  const hash = Array.from(createHash("sha256").update("demo deliverable").digest());
-  const deliveredSig = await program.methods
-    .markDelivered(hash)
-    .accountsPartial({ freelancer: freelancer.publicKey, escrow })
-    .signers([freelancer])
-    .rpc();
-  console.log("2. mark_delivered  ", txLink(deliveredSig));
-
-  const before = (await getAccount(connection, freelancerToken)).amount;
-  const releaseSig = await program.methods
-    .release()
-    .accountsPartial({
-      client: client.publicKey,
-      escrow,
-      mint,
-      vault,
-      freelancerToken,
-      tokenProgram: TOKEN_PROGRAM_ID,
-    })
-    .signers([client])
-    .rpc();
-  console.log("3. release         ", txLink(releaseSig));
-
-  const after = (await getAccount(connection, freelancerToken)).amount;
-  const state = (await program.account.escrow.fetch(escrow)).state;
-  console.log("\nstate             ", Object.keys(state)[0]);
-  console.log("vault balance     ", (await getAccount(connection, vault)).amount.toString());
-  console.log("freelancer gained ", (after - before).toString());
-
-  await verifySignatures({
-    create: createSig,
-    mark_delivered: deliveredSig,
-    release: releaseSig,
-  });
+  const state = Object.keys((await ctx.program.account.escrow.fetch(e.escrow)).state)[0];
+  console.log("\nstate                ", state);
+  console.log("vault                ", tokens(await balanceOf(e.vault)));
+  console.log("freelancer net       ", tokens((await balanceOf(ctx.freelancerToken)) - freelancerStart), "(bond returned + amount)");
+  console.log("client net           ", tokens((await balanceOf(ctx.clientToken)) - clientStart));
+  if ((await balanceOf(ctx.freelancerToken)) - freelancerStart !== BigInt(AMOUNT.toString())) {
+    throw new Error("freelancer should net exactly the amount");
+  }
+  await run.verify();
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+main().catch((err) => { console.error(err); process.exit(1); });

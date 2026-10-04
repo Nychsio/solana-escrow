@@ -52,6 +52,18 @@ Format: `data | decyzja | dlaczego | kto`
 2026-10-04 | Potwierdzenie rezygnacji w UI jako dwukrokowy panel w Actions.tsx (bez window.confirm i bez nowych bibliotek) | zadanie zabraniało window.confirm, a istniejące potwierdzenia (reject, burn) go używają | Claude Code
 2026-10-04 | lucide-react usunięty, zastąpiony @phosphor-icons/react (duotone) | spójny zestaw ikon w drugiej iteracji wyglądu | Piotr
 2026-10-04 | Zależność frontu: simple-icons (tylko logotypy Solana i GitHub, SVG path inline) | logo marek bez własnych grafik; Phantoma nie ma w paczce, w przycisku portfela użyta ikona Phosphor Wallet | Piotr
+2026-10-04 | Escrow v2: dual deposit (bond_bps obu stron), accept_job (zgoda wykonawcy), withdraw przed akceptacją, kara za ghosting w refund_if_late | zamyka dziury: wykonawca mógł nie zareagować bez kosztu, a klient złośliwie odrzucać bez kosztu; źródło: Asgaonkar i Krishnamachari 2018, https://arxiv.org/abs/1806.08379 | Piotr
+2026-10-04 | Nowy stan `Accepted` dopisany NA KOŃCU enuma EscrowState | indeksy Borsh starych wariantów bez zmian, rozmiar konta bez zmian (nowe pola z _reserved: 45 -> 27 B, asercja 235 B) | Piotr
+2026-10-04 | create waliduje mint: klasyczny SPL OK, Token-2022 tylko z białą listą rozszerzeń (MetadataPointer, TokenMetadata, GroupPointer, GroupMemberPointer, TokenGroup, TokenGroupMember), reszta -> UnsupportedMint (deny by default) | PermanentDelegate, TransferHook, TransferFeeConfig, Pausable, DefaultAccountState i inne łamią założenie, że skarbiec kontroluje tylko program | Piotr
+2026-10-04 | freeze_authority minta NIE blokuje create (jawne ograniczenie, opisane w main.md i README) | USDC ją ma; ryzyko emitenta, nie programu | Piotr
+2026-10-04 | Parsowanie rozszerzeń minta przez anchor_spl::token_2022::spl_token_2022 (StateWithExtensions, get_extension_types), bez nowej zależności | anchor-spl 1.1.2 re-eksportuje spl-token-2022-interface, więc Cargo.toml bez zmian | Claude Code
+2026-10-04 | close_escrow spala resztki w skarbcu (burn podpisem PDA, mint mut) i zamyka konto; błąd VaultNotEmpty zostaje w enumie, ale nieużywany | każdy może wysłać tokeny na ATA skarbca, więc dust blokowałby zamknięcie; usunięcie błędu przesunęłoby kody kolejnych | Piotr
+2026-10-04 | claim_if_silent i refund_if_late podpisuje dowolny portfel (`caller`), konto docelowe pinowane do escrow.freelancer / escrow.client | permissionless crank: nikt nie musi czekać na drugą stronę, a obcy może tylko wysłać pieniądze do właściciela | Piotr
+2026-10-04 | request_revision: do max_revisions poprawek (<= 10), termin = max(termin, now + revision_window_secs), wraca Accepted | klient ma wyjście pośrednie między release a reject, a limit zapobiega pętli | Piotr
+2026-10-04 | 13 zdarzeń (emit!) na każdym przejściu stanu | historię można odtworzyć z logów transakcji bez indeksera stanu | Piotr
+2026-10-04 | Zmiana sygnatury create (nowe argumenty na końcu: bond_bps, max_revisions, revision_window_secs) i nowych kont (reject: mint, vault, client_token, token_program; cancel_by_freelancer: freelancer_token) | wymóg dual deposit; frontend musi użyć nowego IDL | Piotr
+2026-10-04 | Upgrade devnet do v2: extend o 47 944 B (konto 324 096 -> 372 040 B), authority bez zmian, upgrade przez Helius RPC z app/.env (przez zmienną środowiskową, bez zapisu i wypisywania klucza) | .so urósł do 369 992 B; publiczny RPC bywa dławiony (429) | Piotr / Claude Code
+2026-10-04 | Skrypty demo v2 przez wspólny scripts/demo-lib.ts; nowy portfel `cranker` w .demo-keys/ (3. strona dla demo-ghost); demo-setup mintuje też wykonawcy (kaucje) | demo kaucji i crank wymaga tokenów wykonawcy i niezależnego wywołującego | Claude Code
 
 ## Użyte komponenty zewnętrzne (disclosure)
 - Solana (devnet), Solana CLI

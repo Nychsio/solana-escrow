@@ -4,31 +4,39 @@ Escrow dla zleceń freelancerskich **bez arbitra**, na Solanie (Anchor). Warunki
 
 ## Stan
 
-Zaimplementowana pełna logika escrow: `create`, `mark_delivered`, `release`, `claim_if_silent`, `refund_if_late`, `cancel_by_freelancer`, `reject` oraz rozstrzyganie sporów bez arbitra: `propose_settlement`, `accept_settlement`, `burn_if_unsettled`, oraz `close_escrow` (odzyskanie rentu).
+Zaimplementowana pełna logika escrow v2 (instrukcje: `create`, `accept_job`, `withdraw`, `mark_delivered`, `request_revision`, `release`, `claim_if_silent`, `refund_if_late`, `cancel_by_freelancer`, `reject`, `propose_settlement`, `accept_settlement`, `burn_if_unsettled`, `close_escrow`): zgoda wykonawcy, kaucje obu stron, poprawki, sprawdzanie minta, zdarzenia na każdym przejściu i spór bez arbitra z decay.
 
-Program jest wdrożony na devnecie (wersja z decay i `close_escrow`). Frontend (`app/`) działa na devnecie. Jeszcze nie zrobione: odebranie upgrade authority.
+Program v2 jest wdrożony na devnecie. Jeszcze nie zrobione: odebranie upgrade authority; frontend (`app/`) do dostosowania do nowego IDL.
 
 ## Devnet
 
 - ID programu: `6KsiGDi8o9E1qNWxpzdew2CkDyQFqfeoLs79fAJ457D8`
 - Explorer: https://explorer.solana.com/address/6KsiGDi8o9E1qNWxpzdew2CkDyQFqfeoLs79fAJ457D8?cluster=devnet
-- Wdrożona wersja = kod z commita `c454642` (dodaje `cancel_by_freelancer` do wersji z decay i `close_escrow`); [transakcja upgrade'u](https://explorer.solana.com/tx/ez3KXxVuptG9V5v1UD5n2CR8Vzzg7jqALRXxsks4J1kZi8vGUojqR2FMqzP9swhJ1AetdSDh1DmaRnMJNNMAzC2?cluster=devnet). Pierwsze 322 048 B programu na łańcuchu są identyczne z `target/deploy/escrow.so`.
-- Ścieżka akceptacji (`yarn demo:flow`): [create](https://explorer.solana.com/tx/64342DqfyBnGaGXxXoFtr8Z7i5retakZ4jtKZHZo9uuVcB7odaf22getZWkMVfKUkzyfMzUkCDWb5kLkvsScg6sP?cluster=devnet) → [mark_delivered](https://explorer.solana.com/tx/5qUfyvZUpm2mKnkSoN6wdENvChr1Piv4CNB24pwDn7WqcJBVmSN1x3o1CzBJrm6WVmqJkcZvMLhjkSyiuHVuxiuf?cluster=devnet) → [release](https://explorer.solana.com/tx/39niP11eh279x6AKH3mm2cZgZsV4d1Xc54CWEZ7bW6gdMjYcnGT2QVGncJHjST1Kn6JB6zp8BeT2WCte9HeGtZC7?cluster=devnet)
-- Ścieżka sporu (`yarn demo:dispute`): create → mark_delivered → reject → propose → accept (z decay, w przykładzie spalone 38,3%) → close_escrow (zwrot rentu):
-  1. [create](https://explorer.solana.com/tx/UNH8SnddpXu6QJQrmdkRnxgpRM4YMGf245nVMXHEAiG35CB6QHSp5YJU2GqXT9xxDS6aYqcjnHop2WS2EUN3pve?cluster=devnet)
-  2. [mark_delivered](https://explorer.solana.com/tx/57fPePGf6Qi158QyQnER6iKxQ19wiuQ3KnU4CUdVHAH5GeB2ZaTEBNuVSTHBvHSX3jEvXaiu3UB49j9ncZtvK2LH?cluster=devnet)
-  3. [reject](https://explorer.solana.com/tx/2vXZ6SGqTdKDSCKLgdhEQq8pKZQBWpTfhaUMkatEDC6zesYfMKGwk7cpJMKUtw3MBqxQN1CnZ1UiTZHYwJ8WoqH6?cluster=devnet)
-  4. [propose_settlement](https://explorer.solana.com/tx/5Yumo4y39KkFRjeKG6voiqLX1ycqQmxHRm5CiLvMdkiCH6N46ordpGpb4RVKsCdQLjjvFrrqtztw65bmScTaqNgo?cluster=devnet)
-  5. [accept_settlement](https://explorer.solana.com/tx/3LA8NQCbvHaGa4uPrhbAAE1BJgqJZJfBqmQ2mMzyfEPF2vD4s5K7NJcbsrhbB7rUQ1gZduR8kH8dCVV6RpQuv3cp?cluster=devnet)
-  6. [close_escrow](https://explorer.solana.com/tx/D3dSe63QmgjpJXJWughKLeZv33ztXzzBK6cXPG5FRhBTDag81w7iktEsyQQ6pVQUHhcCrjapUidRHYB1TKpshNj?cluster=devnet)
-- Ścieżka rezygnacji wykonawcy (`yarn demo:cancel`): [create](https://explorer.solana.com/tx/57ZEQF1aEzQeoCf99FgZCEXyjNubrMtkFuVNsYcz77EbUHSmMsccsGd7UWeushcGK3VosCs5Sig9FM5NQozqovbB?cluster=devnet) → [mark_delivered](https://explorer.solana.com/tx/2cqMfWMtEuh1r3AdJYt2rb1UVdFtL8sD1BFZzxv8xFzvbx6nBqPeskwzhjJqvXJayrVcF5YXqeP6NmqYWsSgEEU2?cluster=devnet) → [cancel_by_freelancer](https://explorer.solana.com/tx/26HGeuxYjw8bVBLxPRt5YSCau7YFXzNKw11wqmUEYk574g9D1xQa5VkKv6CJMxs7YkYU4iExhjHkVGF9t4waYask?cluster=devnet) → [close_escrow](https://explorer.solana.com/tx/5o2cr5Yp1AUg3mykEt8Pk2ZDPoAzuZtWmax5NpJUNNqE34GXtbPpr4qqdaTPTMYEv5hr2krkDPBsJegdef1LP73T?cluster=devnet). Klient odzyskał 100 tokenów, nic nie spalono.
+- Wdrożona wersja = escrow v2, kod z commita `321084d` ([transakcja upgrade'u](https://explorer.solana.com/tx/2iZLqrJjPrG5RxiSoCZQeD8P971MEQ6AthYXGmapqR8jwHmTbtoRnhJxCGLWtkH3erC5f5BZVC3KnRLQ9WFiXPjq?cluster=devnet)). Pierwsze 369 992 B programu na łańcuchu są identyczne z `target/deploy/escrow.so` (reszta to zera po `solana program extend`).
 - Upgrade authority jest na razie przy portfelu deweloperskim; zostanie odebrane przy code freeze (`solana program set-upgrade-authority --final`).
 
-Powtórzenie demo na devnecie: `yarn demo:setup` (portfele i mint w `.demo-keys/`, poza gitem), potem `yarn demo:flow`, `yarn demo:dispute` i `yarn demo:cancel` (wypisują linki do Explorera i sprawdzają statusy przez RPC).
+Powtórzenie demo na devnecie: `yarn demo:setup` (portfele i mint w `.demo-keys/`, poza gitem), potem `yarn demo:flow`, `yarn demo:dispute`, `yarn demo:cancel`, `yarn demo:ghost` i `yarn demo:revision` (wypisują linki do Explorera i sprawdzają statusy przez RPC).
 
 ## Dowód na devnecie
 
-Program: `6KsiGDi8o9E1qNWxpzdew2CkDyQFqfeoLs79fAJ457D8` ([Explorer](https://explorer.solana.com/address/6KsiGDi8o9E1qNWxpzdew2CkDyQFqfeoLs79fAJ457D8?cluster=devnet)). Każda ścieżka poniżej to prawdziwe, sfinalizowane transakcje na devnecie; kliknięcia a, b, c1 i c2 zrobione z interfejsu przeglądarkowego dwoma portfelami, ścieżka d skryptem `yarn demo:cancel`.
+Program v2: `6KsiGDi8o9E1qNWxpzdew2CkDyQFqfeoLs79fAJ457D8` ([Explorer](https://explorer.solana.com/address/6KsiGDi8o9E1qNWxpzdew2CkDyQFqfeoLs79fAJ457D8?cluster=devnet)). Każda ścieżka to prawdziwe, sfinalizowane transakcje na devnecie, uruchomione skryptami `scripts/demo-*.ts` (kaucja 20% z każdej strony).
+
+| Ścieżka | Transakcje po kolei | Co pokazuje |
+|---|---|---|
+| a) release (`demo:flow`) | [create](https://explorer.solana.com/tx/5uggEfBrcwa3uPXuPFNt3is5y1k8ujSwpxPCaF7vceUFNR7QpdZ5gU9bWgukoMTLjncCQ5E1TKkE1ZRjH2joavvF?cluster=devnet) → [accept_job](https://explorer.solana.com/tx/385h2HaKuRoY2Sv5cVbRSQDvgjDhRdPgNoTX54FsBF4E9X7DmEgyDQpniq8jmdYg19d75cknHkzPEmt8fC2krG6E?cluster=devnet) → [mark_delivered](https://explorer.solana.com/tx/2gAmnVa69oiZN3PCuY3Jo4SPJQSa7eKUPjUL8jdCMQpZoxNz4aQQxWUYDQGspnzdrsH61i6GZnkBghVB8G84ibmD?cluster=devnet) → [release](https://explorer.solana.com/tx/5jb9m2AqcMswNpBhHk214JtpWnBCVtbBZ7SB5Ddyv76ujRYbv6mqEPz7LtkDuWq8hYABgbQGVSULwUiEw6uzcaRd?cluster=devnet) → [close_escrow](https://explorer.solana.com/tx/5oApy5jAit6kjXhiyxwsWjUnPgcLyW7ZHryzYNv6TpdYjbmhhg1EFwQZE2bG9yhVWhrZq743pZSxdGBApv9zMoAW?cluster=devnet) | Wykonawca przyjmuje zlecenie i wpłaca kaucję (skarbiec: 120 zamiast 100), a po zatwierdzeniu klient wypłaca mu kwotę plus jego kaucję: wykonawca zarabia dokładnie 100. |
+| b) ghosting (`demo:ghost`) | [create](https://explorer.solana.com/tx/3Ggx6CdWut59yf7cU8xHqNkC1d64JtshyJiUTSs2qHwjLkyjdbjYppC1dGk9uHsoNcisbXBp65wtShuEQYB8PNtX?cluster=devnet) → [accept_job](https://explorer.solana.com/tx/5D5m3g7TTGJvoaYbCmz7q9fYbCqAnyQjLkiWUaA3mv8m66Mxe688akrqutKnqxy5RTor4y8zJN93H4YxXMUpGHtB?cluster=devnet) → [refund_if_late](https://explorer.solana.com/tx/3qTfvtVBunikANUuMg4ZqsegiG7Y1v8yMqj4zpAqSxKoDLs4idBLmURTXmqekueAx4tipJaC9Graj4vP8kMHMMV8?cluster=devnet) → [close_escrow](https://explorer.solana.com/tx/4U8GLZ44CWGd8qACaF26p55kLrh2uuyec7yizfEqov4Xw2F8TbCWSUpJLPmqKkqxGfLw3dhaxe7vGzHoYeUGV2gY?cluster=devnet) | Wykonawca przyjął zlecenie i zniknął. Po terminie dowolny, trzeci portfel (nie klient ani wykonawca) wywołuje `refund_if_late`, a klient dostaje swoje środki plus kaucję wykonawcy (+20 tokenów kary). |
+| c) spór z decay (`demo:dispute`) | [create](https://explorer.solana.com/tx/55CZ8ckfnJsFmvPwttnU9hzynzt9L8Ugjty4kpQiUZ5jZ5VF9YvfF7tkDFNfJ2EpB7NGj9CSCqsghHRfxDL7f4uc?cluster=devnet) → [accept_job](https://explorer.solana.com/tx/2tanD7RetkvRfJSDS2uUv1W1wpwZXvpm9p9D2aWk6uWzbyHnR6StdfK9C2irtotbB7gUfs7hepWpMDQC7xcEU49e?cluster=devnet) → [mark_delivered](https://explorer.solana.com/tx/3bYj1LSMiWGkM7ehtf6MuYqXtwRtRsAgDVKtoLXWT6BatQe8TQuKcZhD1bPXDU2DJjjCZRFi34svF7y6txu1LYqU?cluster=devnet) → [reject](https://explorer.solana.com/tx/4BJAMd62ewR7oPjfKpAbbmkgUgF8rFiKo6x75HYMtnRaoPn5VCk8nEYPR1SmfNu1T1Ee1gGmtg2K7vKJhtcwKat3?cluster=devnet) → [propose_settlement](https://explorer.solana.com/tx/5sknVWihEfGwTGQHoT1uUD1ccTnGVAhU9yRtBJvtsDZLK4T98u4Q7aP4pbQsvxYEYvWptg3YXKQAPfA2rUZTE1hE?cluster=devnet) → [accept_settlement](https://explorer.solana.com/tx/4cu8rAvLSaDJKsWFRMbtyCx3CoYQeuweZMeV8iaN2AjSeqtakW1me66aT5Kn5rLiqrDo2Ymqo7ujbuYPRpMaY71B?cluster=devnet) → [close_escrow](https://explorer.solana.com/tx/5corGwyBzKvKGbz18UUP25EyAmKHjKdFoxFP7a7AgDFtzcTJoAqpgsB6TK6dkYMDdEHEWFxrvBx5EJuAg9BVd6n2?cluster=devnet) | Klient odrzuca dostawę i wpłaca własną kaucję (skarbiec 140), strony ustalają podział 70/30, a ugoda po ok. 20 s z okna 60 s spala część skarbca (38,3%), więc zwlekanie kosztuje obie strony. |
+| d) rezygnacja wykonawcy (`demo:cancel`) | [create](https://explorer.solana.com/tx/3eH5nuo36LmNjkAPs1it915MDmnDnfaFo4BUV1EnFYYM2x3uugjJzRxEZTLpwFNov5JveqJtqgjr5xWN1Ur6V5sK?cluster=devnet) → [accept_job](https://explorer.solana.com/tx/3QMzRKhppQ8jvWrePYF7pX54sziMG24dJzuCTutBvRSYHnbBSbpo7UiEaboDRpBjvK6yctWDgmTcYZw9BDLcKzmp?cluster=devnet) → [mark_delivered](https://explorer.solana.com/tx/2Gr6MF19svSaPpHcY14Zp6M3FgRGyuv7NStNv311QvfJtbAJWuXPKSW4oKeBc4xyeWNYz2rYD2Ji8fgsJeXpui43?cluster=devnet) → [cancel_by_freelancer](https://explorer.solana.com/tx/4Vki2nZ4b8r6Zv97j5MrsA3EvBPEYgKQLJ7jY6KeDhQHKACJgoJKsf5dBCSQhkr8zbmfJjgwMPY3A6HXYx4yhFvk?cluster=devnet) → [close_escrow](https://explorer.solana.com/tx/3Hk3JvjpzA5EEDN1avb48WXk3BgNw5cxRi3VQuV2BaGHNikdJ8EU9zvTyR1eYWd8w5io1Bk7RLkjibCabTYpGcXg?cluster=devnet) | Wykonawca jednostronnie rozwiązuje umowę: każda strona dostaje z powrotem dokładnie to, co wpłaciła, bez spalania. |
+| e) poprawka (`demo:revision`) | [create](https://explorer.solana.com/tx/5CZpb4HB6Ys36AYwY83kodqGn61akkVMEr56GJFppaypkth92xMAopZaNa8exxY1GFJAsGzvfQL3AisWgzmCg7zx?cluster=devnet) → [accept_job](https://explorer.solana.com/tx/4pUUSu2uXG79w8KJoP3rPjtfBV5BJUaZ8LdSbcJe1mZcQUbjkDBGZL7YFURkhpLPj5fEKztDFXjGFdtTDBf5jDZ8?cluster=devnet) → [mark_delivered](https://explorer.solana.com/tx/4RKX26zHUyHnoLPyFWTo2PRNFWUMW6twZ4tmYGzC2GrXoYhkL54BRHXi42tRVSRdYGqY23VqtfcSryaFj8N9he1o?cluster=devnet) → [request_revision](https://explorer.solana.com/tx/3LV2YdWZocYavvaki7eSd9DbZvfLkmzGL5FmrDKAbJrWBkhGw2PCGEQfJMo9vSiqEAnae5CJBcWQQKTRR31oVB4u?cluster=devnet) → [mark_delivered](https://explorer.solana.com/tx/46SQ9EFv7B3H4aJAPdP91U5zbYrvxfgTctEaivAAboWbDSoHEW8KMmwo1m55fUJae4zVMPQ1bpaav6KWn2KJLjcq?cluster=devnet) → [release](https://explorer.solana.com/tx/qB1bCnhorFhFn6oAcQHGEKhuQk5zjDaDS5u8oBoyvPuEhsKkMfhHmxn5YfukS5xaA3wZSdgWC1iq2NASGeL84gc?cluster=devnet) → [close_escrow](https://explorer.solana.com/tx/aY1aqrwfnaFH2xbThLzeekTVx8VQULgs2tPaeRFgsQiRYbddktdDbKfFTBk9S1C54fC8vtu9o6VT1VCknAC4eUo?cluster=devnet) | Klient prosi o poprawkę zamiast odrzucać: zlecenie wraca do `Accepted` z późniejszym terminem, wykonawca dostarcza drugą wersję i dostaje wypłatę. |
+| Upgrade authority | `<TBD po --final>` | Po odebraniu nikt, także autor, nie może zmienić programu. |
+
+Linki z kroków `close_escrow` zwracają rent klientowi (skarbiec i konto umowy są zamykane).
+
+## Dowód na devnecie: wersja v1 (historia)
+
+Te transakcje wykonano na poprzedniej wersji programu (bez `accept_job`, kaucji i poprawek); pozostają na łańcuchu jako historia. Ścieżki a, b, c1 i c2 kliknięto z interfejsu przeglądarkowego, ścieżkę d skryptem.
+
+Program (wersja v1): `6KsiGDi8o9E1qNWxpzdew2CkDyQFqfeoLs79fAJ457D8` ([Explorer](https://explorer.solana.com/address/6KsiGDi8o9E1qNWxpzdew2CkDyQFqfeoLs79fAJ457D8?cluster=devnet)). Każda ścieżka poniżej to prawdziwe, sfinalizowane transakcje na devnecie; kliknięcia a, b, c1 i c2 zrobione z interfejsu przeglądarkowego dwoma portfelami, ścieżka d skryptem `yarn demo:cancel`.
 
 | Ścieżka | Transakcje po kolei | Co pokazuje |
 |---|---|---|
@@ -38,6 +46,19 @@ Program: `6KsiGDi8o9E1qNWxpzdew2CkDyQFqfeoLs79fAJ457D8` ([Explorer](https://expl
 | c2) burn | [create](https://explorer.solana.com/tx/4Fz1Wy2Th3uBVu26eCphwLFA16W87wz8CMjESuAbhVDhkfarsRPZkd5oFG9Hr9Z3gvyz32DCJKae3XSfprUeMT2N?cluster=devnet) → [mark_delivered](https://explorer.solana.com/tx/2YB7dUaBoSgHyb1r3vKkCmP2btjCt14rp1hPvRnbup7orYehioTUmndm9V6BQVzxRfrtXxyJPS5XvqFdAniSymrG?cluster=devnet) → [reject](https://explorer.solana.com/tx/2Wr1CDvzzeVpVoY7VGwozmr3rwk3h8PmbiMeACuNbgm8RWCUPqcTfhk5YkmT3JE6bxWAgJHeUbpzremegehqiqYL?cluster=devnet) → [burn_if_unsettled](https://explorer.solana.com/tx/65GdBWHJGtVYbg5kz4hoNQz6rQTDMhoziKZfgCt4u8yikRBsPssudmN1gJ859jR6DGKeH9vQHk87x1PQ5ge45d6g?cluster=devnet) → [close_escrow](https://explorer.solana.com/tx/5JEkgavuyG9gwaMzwcvSd7Zd7Bcg6j3Avkp3A616GKsAUjbVeajd6tMCNRDfocsJYCkZAVkeAwzedLCtRbuhitDx?cluster=devnet) | Bez ugody w oknie sporu środki zostają spalone przez dowolną osobę, więc nikt nie zyskuje na sporze. |
 | d) cancel_by_freelancer | [create](https://explorer.solana.com/tx/57ZEQF1aEzQeoCf99FgZCEXyjNubrMtkFuVNsYcz77EbUHSmMsccsGd7UWeushcGK3VosCs5Sig9FM5NQozqovbB?cluster=devnet) → [mark_delivered](https://explorer.solana.com/tx/2cqMfWMtEuh1r3AdJYt2rb1UVdFtL8sD1BFZzxv8xFzvbx6nBqPeskwzhjJqvXJayrVcF5YXqeP6NmqYWsSgEEU2?cluster=devnet) → [cancel_by_freelancer](https://explorer.solana.com/tx/26HGeuxYjw8bVBLxPRt5YSCau7YFXzNKw11wqmUEYk574g9D1xQa5VkKv6CJMxs7YkYU4iExhjHkVGF9t4waYask?cluster=devnet) → [close_escrow](https://explorer.solana.com/tx/5o2cr5Yp1AUg3mykEt8Pk2ZDPoAzuZtWmax5NpJUNNqE34GXtbPpr4qqdaTPTMYEv5hr2krkDPBsJegdef1LP73T?cluster=devnet) | Wykonawca jednostronnie oddaje klientowi całe saldo bez spalania, a klient odzyskuje rent po `close_escrow`. |
 | Upgrade authority | `<TBD po --final>` | Po odebraniu nikt, także autor, nie może zmienić programu. |
+
+
+Dodatkowe ścieżki ze skryptów v1:
+
+- Ścieżka akceptacji (`yarn demo:flow`): [create](https://explorer.solana.com/tx/64342DqfyBnGaGXxXoFtr8Z7i5retakZ4jtKZHZo9uuVcB7odaf22getZWkMVfKUkzyfMzUkCDWb5kLkvsScg6sP?cluster=devnet) → [mark_delivered](https://explorer.solana.com/tx/5qUfyvZUpm2mKnkSoN6wdENvChr1Piv4CNB24pwDn7WqcJBVmSN1x3o1CzBJrm6WVmqJkcZvMLhjkSyiuHVuxiuf?cluster=devnet) → [release](https://explorer.solana.com/tx/39niP11eh279x6AKH3mm2cZgZsV4d1Xc54CWEZ7bW6gdMjYcnGT2QVGncJHjST1Kn6JB6zp8BeT2WCte9HeGtZC7?cluster=devnet)
+- Ścieżka sporu (`yarn demo:dispute`): create → mark_delivered → reject → propose → accept (z decay, w przykładzie spalone 38,3%) → close_escrow (zwrot rentu):
+  1. [create](https://explorer.solana.com/tx/UNH8SnddpXu6QJQrmdkRnxgpRM4YMGf245nVMXHEAiG35CB6QHSp5YJU2GqXT9xxDS6aYqcjnHop2WS2EUN3pve?cluster=devnet)
+  2. [mark_delivered](https://explorer.solana.com/tx/57fPePGf6Qi158QyQnER6iKxQ19wiuQ3KnU4CUdVHAH5GeB2ZaTEBNuVSTHBvHSX3jEvXaiu3UB49j9ncZtvK2LH?cluster=devnet)
+  3. [reject](https://explorer.solana.com/tx/2vXZ6SGqTdKDSCKLgdhEQq8pKZQBWpTfhaUMkatEDC6zesYfMKGwk7cpJMKUtw3MBqxQN1CnZ1UiTZHYwJ8WoqH6?cluster=devnet)
+  4. [propose_settlement](https://explorer.solana.com/tx/5Yumo4y39KkFRjeKG6voiqLX1ycqQmxHRm5CiLvMdkiCH6N46ordpGpb4RVKsCdQLjjvFrrqtztw65bmScTaqNgo?cluster=devnet)
+  5. [accept_settlement](https://explorer.solana.com/tx/3LA8NQCbvHaGa4uPrhbAAE1BJgqJZJfBqmQ2mMzyfEPF2vD4s5K7NJcbsrhbB7rUQ1gZduR8kH8dCVV6RpQuv3cp?cluster=devnet)
+  6. [close_escrow](https://explorer.solana.com/tx/D3dSe63QmgjpJXJWughKLeZv33ztXzzBK6cXPG5FRhBTDag81w7iktEsyQQ6pVQUHhcCrjapUidRHYB1TKpshNj?cluster=devnet)
+- Ścieżka rezygnacji wykonawcy (`yarn demo:cancel`): [create](https://explorer.solana.com/tx/57ZEQF1aEzQeoCf99FgZCEXyjNubrMtkFuVNsYcz77EbUHSmMsccsGd7UWeushcGK3VosCs5Sig9FM5NQozqovbB?cluster=devnet) → [mark_delivered](https://explorer.solana.com/tx/2cqMfWMtEuh1r3AdJYt2rb1UVdFtL8sD1BFZzxv8xFzvbx6nBqPeskwzhjJqvXJayrVcF5YXqeP6NmqYWsSgEEU2?cluster=devnet) → [cancel_by_freelancer](https://explorer.solana.com/tx/26HGeuxYjw8bVBLxPRt5YSCau7YFXzNKw11wqmUEYk574g9D1xQa5VkKv6CJMxs7YkYU4iExhjHkVGF9t4waYask?cluster=devnet) → [close_escrow](https://explorer.solana.com/tx/5o2cr5Yp1AUg3mykEt8Pk2ZDPoAzuZtWmax5NpJUNNqE34GXtbPpr4qqdaTPTMYEv5hr2krkDPBsJegdef1LP73T?cluster=devnet). Klient odzyskał 100 tokenów, nic nie spalono.
 
 ## Co gdzie leży
 
@@ -49,9 +70,10 @@ Program: `6KsiGDi8o9E1qNWxpzdew2CkDyQFqfeoLs79fAJ457D8` ([Explorer](https://expl
 | `programs/escrow/src/instructions/create.rs` | `create`: utworzenie umowy i wpłata do skarbca |
 | `programs/escrow/src/instructions/delivery.rs` | `mark_delivered`, `reject` |
 | `programs/escrow/src/instructions/close.rs` | `close_escrow`: zamknięcie skarbca i konta po zakończeniu umowy |
+| `programs/escrow/src/events.rs` | Zdarzenia emitowane przy każdym przejściu stanu |
 | `programs/escrow/src/instructions/dispute.rs` | `propose_settlement`, `accept_settlement`, `burn_if_unsettled` |
 | `programs/escrow/src/instructions/payout.rs` | `release`, `claim_if_silent`, `refund_if_late`, `cancel_by_freelancer` oraz `pay_from_vault` (jedyna funkcja wypłacająca ze skarbca) |
-| `scripts/` | Skrypty demo na devnecie: `demo-setup.ts` (portfele, mint, tokeny), `demo-flow.ts` (create → mark_delivered → release), `export-keys.ts` (klucze demo w base58 do Phantoma, tylko terminal) |
+| `scripts/` | Skrypty demo na devnecie: `demo-setup.ts` (portfele, mint, tokeny, portfel crank), `demo-lib.ts` (wspólne wywołania), `demo-flow.ts`, `demo-dispute.ts`, `demo-cancel.ts`, `demo-ghost.ts`, `demo-revision.ts`, `export-keys.ts` (klucze demo w base58 do Phantoma, tylko lokalnie) |
 | `app/` | Frontend (Vite + React + TS + Wallet Adapter): czyta konta z chaina i buduje transakcje, bez backendu |
 | `tests/escrow.ts` | Testy wszystkich ścieżek na localnecie |
 | `Anchor.toml` | Konfiguracja workspace'u Anchor (klaster, portfel, skrypt testowy) |
@@ -62,27 +84,33 @@ Program: `6KsiGDi8o9E1qNWxpzdew2CkDyQFqfeoLs79fAJ457D8` ([Explorer](https://expl
 
 | Instrukcja | Kto podpisuje | Warunek | Skutek |
 |---|---|---|---|
-| `create` (+ `dispute_window_secs`) | klient | `amount > 0`, `dispute_window_secs > 0`, `deadline_ts > now` | wpłata do skarbca, `Funded` |
-| `mark_delivered(deliverable_hash)` | wykonawca | `Funded`, `now <= deadline_ts` | zapis czasu i hasha dostawy, `Delivered` |
-| `release` | klient | `Funded` lub `Delivered` | skarbiec → wykonawca, `Released` |
-| `claim_if_silent` | wykonawca | `Delivered`, `now > delivered_at + review_window_secs` | skarbiec → wykonawca, `Released` |
-| `refund_if_late` | klient | `Funded`, `now > deadline_ts` | skarbiec → klient, `Refunded` |
-| `cancel_by_freelancer` | wykonawca | `Funded`, `Delivered` lub `Frozen` (bez warunków czasowych) | cała zawartość skarbca → klient bez spalania, czyści propozycję ugody, `Refunded` |
-| `reject` | klient | `Delivered`, `now <= delivered_at + review_window_secs` | `Frozen`, zapis `frozen_at`, środki zostają w skarbcu |
+| `create` (+ `dispute_window_secs`, `bond_bps`, `max_revisions`, `revision_window_secs`) | klient | `amount > 0`, `dispute_window_secs > 0`, `deadline_ts > now`, `bond_bps <= 10000`, `max_revisions <= 10` (i okno > 0, gdy poprawki dozwolone), mint z białej listy | wpłata kwoty do skarbca, `Funded` (czeka na akceptację) |
+| `accept_job` | wykonawca | `Funded`, `now <= deadline_ts` | wpłata kaucji `amount * bond_bps / 10000` do skarbca, `Accepted` |
+| `withdraw` | klient | `Funded` (przed akceptacją) | całe saldo → klient, `Refunded` |
+| `mark_delivered(deliverable_hash)` | wykonawca | `Accepted`, `now <= deadline_ts` | zapis czasu i hasha dostawy, `Delivered` |
+| `request_revision` | klient | `Delivered`, w oknie akceptacji, `revisions_used < max_revisions` | `Accepted`, termin = max(termin, teraz + okno poprawki) |
+| `release` | klient | `Funded`, `Accepted` lub `Delivered` | całe saldo (kwota + kaucja wykonawcy) → wykonawca, `Released` |
+| `claim_if_silent` | ktokolwiek | `Delivered`, `now > delivered_at + review_window_secs` | całe saldo → wykonawca (konto pinowane), `Released` |
+| `refund_if_late` | ktokolwiek | `Funded` lub `Accepted`, `now > deadline_ts` | całe saldo → klient (konto pinowane); z `Accepted` to kwota plus kaucja wykonawcy jako kara za ghosting, `Refunded` |
+| `cancel_by_freelancer` | wykonawca | `Funded`, `Accepted`, `Delivered` lub `Frozen` (bez warunków czasowych) | wykonawca odzyskuje własną kaucję (jeśli wpłacona), klient resztę, bez spalania, czyści propozycję ugody, `Refunded` |
+| `reject` | klient | `Delivered`, `now <= delivered_at + review_window_secs` | klient wpłaca własną kaucję, `Frozen`, zapis `frozen_at` |
 | `propose_settlement(freelancer_bps)` | klient lub wykonawca | `Frozen`, `now <= frozen_at + dispute_window_secs`, `bps <= 10000` | zapis proponującego i podziału, nadpisuje poprzednią propozycję |
 | `accept_settlement(freelancer_bps)` | strona inna niż proponujący | `Frozen`, jest propozycja, `bps` = zapisany, w oknie sporu | najpierw spalany jest `saldo * elapsed / dispute_window_secs` (decay), z reszty wykonawca dostaje `reszta * bps / 10000`, klient resztę, `Settled` |
 | `burn_if_unsettled` | ktokolwiek (płaci tylko za transakcję) | `Frozen`, `now > frozen_at + dispute_window_secs` | spalenie całego salda skarbca, `Burned` |
-| `close_escrow` | klient | `Released`, `Refunded`, `Settled` lub `Burned`, saldo skarbca = 0 | zamyka skarbiec i konto `Escrow`, rent wraca do klienta |
+| `close_escrow` | klient | `Released`, `Refunded`, `Settled` lub `Burned` | spala ewentualne resztki w skarbcu (dust), zamyka skarbiec i konto `Escrow`, rent wraca do klienta |
 
 - Konto `Escrow` to PDA z seedów `["escrow", client, id_u64]`. Skarbiec to konto tokenowe (ATA), którego authority jest to PDA.
-- PDA nie ma klucza prywatnego, więc wypłatę może podpisać tylko ten program (signer seeds), i robi to w jednym miejscu: `pay_from_vault`.
-- Spór nie ma arbitra. Po `reject` środki są zamrożone, a strony mają okno (`dispute_window_secs`) na ugodę: jedna proponuje podział, druga go akceptuje, podając ten sam `bps`. Gdy okno minie bez ugody, każdy może spalić środki (`burn_if_unsettled`), więc nikt, także autor programu, nie zyskuje na sporze.
-- Decay: im dłużej trwa spór, tym większa część skarbca ginie przy ugodzie (liniowo od 0% do 100% w oknie sporu), więc obie strony mają powód, by dogadać się szybko, a brak ugody kończy się spaleniem.
+- PDA nie ma klucza prywatnego, więc wypłatę lub spalenie może podpisać tylko ten program (signer seeds, w jednym miejscu: `Escrow::with_signer_seeds`); wypłaty idą przez `pay_from_vault`.
+- Dual deposit: obie strony wpłacają kaucję (wykonawca przy `accept_job`, klient przy `reject`), więc ghosting i złośliwe odrzucenie kosztują, a nie są darmowe. Podstawa: Asgaonkar i Krishnamachari 2018, https://arxiv.org/abs/1806.08379.
+- Spór nie ma arbitra. Po `reject` środki (kwota plus dwie kaucje) są zamrożone, a strony mają okno (`dispute_window_secs`) na ugodę: jedna proponuje podział, druga go akceptuje, podając ten sam `bps`. Decay: im dłużej trwa spór, tym większa część skarbca ginie przy ugodzie (liniowo od 0% do 100% w oknie sporu). Bez ugody każdy może spalić środki (`burn_if_unsettled`), więc nikt, także autor, nie zyskuje na sporze. Wykonawca może w każdej chwili wycofać się przez `cancel_by_freelancer` i odzyskać własną kaucję.
+- `claim_if_silent` i `refund_if_late` może wywołać każdy portfel (crank); konto docelowe jest przypięte do wykonawcy lub klienta, więc obcy może tylko wysłać pieniądze do prawowitego właściciela.
+- `create` sprawdza mint. Klasyczny SPL Token jest dozwolony, Token-2022 tylko z rozszerzeniami metadata i group (biała lista, reszta odrzucana jako `UnsupportedMint`): nic nie może przenieść, opodatkować, zamrozić ani wstrzymać skarbca poza programem. Jawne ograniczenie: uprawnienie `freeze_authority` samego minta nie jest rozszerzeniem i nie blokuje (ma je np. USDC), więc emitent takiego tokena może zamrozić konto skarbca.
+- Na każdym przejściu stanu program emituje zdarzenie (`EscrowCreated`, `JobAccepted`, `Withdrawn`, `Delivered`, `RevisionRequested`, `Released`, `Refunded`, `Rejected`, `SettlementProposed`, `Settled`, `Burned`, `Cancelled`, `Closed`), więc historię można odtworzyć z logów transakcji.
 - `Released`, `Refunded`, `Settled` i `Burned` są stanami końcowymi: przyjmuje je już tylko `close_escrow`.
-- Rozmiar konta `Escrow` jest stały (235 bajtów danych, pilnuje tego asercja w `state.rs`); nowe pola biorą się z `_reserved`.
+- Rozmiar konta `Escrow` jest stały (235 bajtów danych, pilnuje tego asercja w `state.rs`); nowe pola biorą się z `_reserved`, a nowy stan `Accepted` jest dopisany na końcu enuma, więc indeksy starszych stanów się nie zmieniły.
 - W programie nie ma klucza admina, instrukcji `update` ani konta uprzywilejowanego.
 
-Ograniczenia: konta tokenowe odbiorców muszą istnieć przed wypłatą; konta zamyka dopiero `close_escrow` (po jego użyciu `id` można utworzyć ponownie); spalenie jest nieodwracalne (to cena braku arbitra).
+Ograniczenia: konta tokenowe odbiorców muszą istnieć przed wypłatą; konta zamyka dopiero `close_escrow` (po jego użyciu `id` można utworzyć ponownie); spalenie jest nieodwracalne (to cena braku arbitra); `freeze_authority` minta nie jest sprawdzane (patrz wyżej).
 
 ## Uruchomienie
 

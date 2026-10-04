@@ -64,7 +64,7 @@ async function main() {
   sigs.refund_if_late = await program.methods
     .refundIfLate()
     .accountsPartial({
-      client: client.publicKey,
+      caller: client.publicKey,
       escrow: FUNDED,
       mint: funded.mint,
       vault: vaultOf(funded, FUNDED),

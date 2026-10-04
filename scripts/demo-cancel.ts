@@ -1,140 +1,55 @@
-// Cancel path on devnet: create -> mark_delivered -> cancel_by_freelancer -> close_escrow.
-// The freelancer hands the whole vault back to the client; nothing burns.
-import * as anchor from "@anchor-lang/core";
-import { BN, Program } from "@anchor-lang/core";
-import { createHash } from "crypto";
+// Cancel path on devnet: create -> accept_job -> mark_delivered -> cancel_by_freelancer -> close_escrow.
+// The freelancer unwinds the deal: each side gets back exactly its own deposit, nothing burns.
+import { TOKEN_PROGRAM_ID, getMint } from "@solana/spl-token";
+import { connection, feeOf } from "./common";
 import {
-  TOKEN_PROGRAM_ID,
-  getAccount,
-  getAssociatedTokenAddressSync,
-  getMint,
-} from "@solana/spl-token";
-import { PublicKey } from "@solana/web3.js";
-import * as fs from "fs";
-import * as path from "path";
-import {
-  KEYS_DIR,
-  ROOT,
-  connection,
-  feeOf,
-  loadKeypair,
-  readMint,
-  txLink,
-  verifySignatures,
-} from "./common";
-import { Escrow } from "../target/types/escrow";
-
-const AMOUNT = new BN(100_000_000); // 100 tokens at 6 decimals
-const tokens = (raw: bigint) => (Number(raw) / 1e6).toFixed(6);
+  AMOUNT, BOND_BPS, Run, acceptJobCall, balanceOf, chainNow, closeCall, createCall, deliverCall,
+  loadContext, newEscrow, tokens,
+} from "./demo-lib";
 
 async function main() {
-  const mint = readMint();
-  if (!mint) throw new Error("No demo mint found. Run `yarn demo:setup` first.");
-  const client = loadKeypair(path.join(KEYS_DIR, "client.json"));
-  const freelancer = loadKeypair(path.join(KEYS_DIR, "freelancer.json"));
+  const ctx = loadContext();
+  const e = newEscrow(ctx);
+  const run = new Run();
+  console.log("escrow", e.escrow.toBase58());
 
-  const provider = new anchor.AnchorProvider(
-    connection,
-    new anchor.Wallet(client),
-    { commitment: "confirmed" }
+  const clientStart = await balanceOf(ctx.clientToken);
+  const freelancerStart = await balanceOf(ctx.freelancerToken);
+  const supplyStart = (await getMint(connection, ctx.mint)).supply;
+
+  await run.step("create", createCall(ctx, e, { deadlineTs: (await chainNow()) + 600, review: 120, dispute: 120 }));
+  await run.step("accept_job", acceptJobCall(ctx, e));
+  await run.step("mark_delivered", deliverCall(ctx, e));
+  console.log("   vault (amount + bond)", tokens(await balanceOf(e.vault)));
+
+  await run.step(
+    "cancel_by_freelancer",
+    ctx.program.methods.cancelByFreelancer()
+      .accountsPartial({
+        freelancer: ctx.freelancer.publicKey, escrow: e.escrow, mint: ctx.mint, vault: e.vault,
+        clientToken: ctx.clientToken, freelancerToken: ctx.freelancerToken, tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([ctx.freelancer]).rpc()
   );
-  const idl = JSON.parse(
-    fs.readFileSync(path.join(ROOT, "target/idl/escrow.json"), "utf8")
-  );
-  const program = new Program<Escrow>(idl, provider);
-
-  const id = new BN(Date.now());
-  const [escrow] = PublicKey.findProgramAddressSync(
-    [Buffer.from("escrow"), client.publicKey.toBuffer(), id.toArrayLike(Buffer, "le", 8)],
-    program.programId
-  );
-  const vault = getAssociatedTokenAddressSync(mint, escrow, true);
-  const clientToken = getAssociatedTokenAddressSync(mint, client.publicKey);
-  const balanceOf = async (account: PublicKey) =>
-    (await getAccount(connection, account)).amount;
-
-  console.log("escrow", escrow.toBase58());
-  console.log("vault ", vault.toBase58());
-
-  const sigs: Record<string, string> = {};
-  const chainNow = (await connection.getBlockTime(await connection.getSlot()))!;
-  const clientStart = await balanceOf(clientToken);
-  const supplyStart = (await getMint(connection, mint)).supply;
-
-  sigs.create = await program.methods
-    .create(id, AMOUNT, new BN(chainNow + 600), new BN(120), new BN(120))
-    .accountsPartial({
-      client: client.publicKey,
-      freelancer: freelancer.publicKey,
-      mint,
-      clientToken,
-      escrow,
-      vault,
-      tokenProgram: TOKEN_PROGRAM_ID,
-    })
-    .signers([client])
-    .rpc();
-  console.log("\n1. create               ", txLink(sigs.create));
-  console.log("   vault                ", tokens(await balanceOf(vault)), "tokens");
-
-  const hash = Array.from(createHash("sha256").update("demo cancel deliverable").digest());
-  sigs.mark_delivered = await program.methods
-    .markDelivered(hash)
-    .accountsPartial({ freelancer: freelancer.publicKey, escrow })
-    .signers([freelancer])
-    .rpc();
-  console.log("2. mark_delivered       ", txLink(sigs.mark_delivered));
-
-  sigs.cancel_by_freelancer = await program.methods
-    .cancelByFreelancer()
-    .accountsPartial({
-      freelancer: freelancer.publicKey,
-      escrow,
-      mint,
-      vault,
-      clientToken,
-      tokenProgram: TOKEN_PROGRAM_ID,
-    })
-    .signers([freelancer])
-    .rpc();
-  console.log("3. cancel_by_freelancer ", txLink(sigs.cancel_by_freelancer));
-
-  const state = Object.keys((await program.account.escrow.fetch(escrow)).state)[0];
-  const clientEnd = await balanceOf(clientToken);
-  const burned = supplyStart - (await getMint(connection, mint)).supply;
+  const state = Object.keys((await ctx.program.account.escrow.fetch(e.escrow)).state)[0];
+  const burned = supplyStart - (await getMint(connection, ctx.mint)).supply;
   console.log("   state                ", state);
-  console.log("   vault                ", tokens(await balanceOf(vault)));
-  console.log(`   client tokens        ${tokens(clientStart)} -> ${tokens(clientEnd)} (back to the start)`);
+  console.log("   vault                ", tokens(await balanceOf(e.vault)));
+  console.log(`   client tokens        ${tokens(clientStart)} -> ${tokens(await balanceOf(ctx.clientToken))} (everything back)`);
+  console.log(`   freelancer tokens    ${tokens(freelancerStart)} -> ${tokens(await balanceOf(ctx.freelancerToken))} (own bond back)`);
   console.log("   burned               ", tokens(burned));
-  if (state !== "refunded" || clientEnd !== clientStart || burned !== 0n) {
-    throw new Error("cancel did not return the full vault without burning");
+  if (state !== "refunded" || burned !== 0n || (await balanceOf(ctx.clientToken)) !== clientStart || (await balanceOf(ctx.freelancerToken)) !== freelancerStart) {
+    throw new Error("cancel should return each side exactly its own deposit without burning");
   }
 
-  const rent = (await connection.getBalance(escrow)) + (await connection.getBalance(vault));
-  const solBefore = await connection.getBalance(client.publicKey);
-  sigs.close_escrow = await program.methods
-    .closeEscrow()
-    .accountsPartial({
-      client: client.publicKey,
-      escrow,
-      mint,
-      vault,
-      tokenProgram: TOKEN_PROGRAM_ID,
-    })
-    .signers([client])
-    .rpc();
-  console.log("4. close_escrow         ", txLink(sigs.close_escrow));
-
-  const fee = await feeOf(sigs.close_escrow);
-  const solAfter = await connection.getBalance(client.publicKey);
-  console.log(`   rent returned        ${rent} lamports (escrow + vault), tx fee ${fee}`);
-  console.log(`   client SOL change    ${solAfter - solBefore} lamports (= rent - fee)`);
-  if (solAfter - solBefore !== rent - fee) throw new Error("rent refund mismatch");
-
-  await verifySignatures(sigs);
+  const rent = (await connection.getBalance(e.escrow)) + (await connection.getBalance(e.vault));
+  const solBefore = await connection.getBalance(ctx.client.publicKey);
+  const closeSig = await run.step("close_escrow", closeCall(ctx, e));
+  const fee = await feeOf(closeSig);
+  const solChange = (await connection.getBalance(ctx.client.publicKey)) - solBefore;
+  console.log(`   rent returned        ${rent} lamports, tx fee ${fee}, client SOL change ${solChange}`);
+  if (solChange !== rent - fee) throw new Error("rent refund mismatch");
+  await run.verify();
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+main().catch((err) => { console.error(err); process.exit(1); });

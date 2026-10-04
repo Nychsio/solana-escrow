@@ -24,6 +24,7 @@ import {
 
 const MIN_SOL = 0.05 * LAMPORTS_PER_SOL;
 const TOKENS_FOR_CLIENT = 1000n * 10n ** BigInt(DECIMALS);
+const TOKENS_FOR_FREELANCER = 500n * 10n ** BigInt(DECIMALS);
 
 async function topUpSol(name: string, wallet: PublicKey) {
   const balance = await connection.getBalance(wallet);
@@ -55,6 +56,10 @@ async function main() {
 
   await topUpSol("client", client.publicKey);
   await topUpSol("freelancer", freelancer.publicKey);
+  // A third wallet that only triggers claim_if_silent / refund_if_late (the crank demo).
+  const cranker = loadOrCreateKeypair("cranker");
+  console.log("cranker    ", cranker.publicKey.toBase58());
+  await topUpSol("cranker", cranker.publicKey);
 
   let mint = readMint();
   if (mint && (await connection.getAccountInfo(mint))) {
@@ -72,7 +77,7 @@ async function main() {
     client.publicKey
   );
   // The payout destination must exist before release, so create it up front.
-  await getOrCreateAssociatedTokenAccount(
+  const freelancerToken = await getOrCreateAssociatedTokenAccount(
     connection,
     client,
     mint,
@@ -92,6 +97,22 @@ async function main() {
   }
   const now = (await getAccount(connection, clientToken.address)).amount;
   console.log(`client token balance: ${Number(now) / 10 ** DECIMALS}`);
+
+  // The freelancer posts a bond in accept_job, so they need tokens too (the client
+  // wallet is the mint authority of the demo mint).
+  const freelancerHeld = (await getAccount(connection, freelancerToken.address)).amount;
+  if (freelancerHeld < TOKENS_FOR_FREELANCER) {
+    await mintTo(
+      connection,
+      client,
+      mint,
+      freelancerToken.address,
+      client,
+      TOKENS_FOR_FREELANCER - freelancerHeld
+    );
+  }
+  const freelancerNow = (await getAccount(connection, freelancerToken.address)).amount;
+  console.log(`freelancer token balance: ${Number(freelancerNow) / 10 ** DECIMALS}`);
 }
 
 main().catch((err) => {

@@ -23,6 +23,15 @@
 ## Blokery
 - Brak.
 
+## Zadanie 8: escrow v2 (2026-10-04)
+- Etapy (każdy: zielony `anchor test` + osobny commit): P1 `322a71c` (walidacja minta, burn dustu w close), P2 `36c9987` (accept_job, withdraw, kaucje, reject/cancel z kaucjami), P3 `291fe14` (permissionless claim_if_silent i refund_if_late), P4 `7d0e076` (request_revision), P5 `321084d` (13 zdarzeń). `anchor test`: 71 zielonych.
+- Konto Escrow: rozmiar bez zmian (235 B), nowe pola z `_reserved` (45 -> 27): bond_amount, max_revisions, revisions_used, revision_window_secs. Nowy stan `Accepted` na końcu enuma.
+- Devnet = escrow v2 (commit `321084d`): `extend` o 47 944 B (konto 324 096 -> 372 040 B), upgrade w slocie 507178209, authority bez zmian (NIE odebrane), brak osieroconych buforów. Pierwsze 369 992 B zrzutu = `target/deploy/escrow.so` (reszta zera).
+- Saldo portfela dev: **przed 2,823958 SOL**, po `extend` 2,580397, po upgrade'ie 2,572254 (koszt netto ok. 0,25 SOL: rent rozszerzenia 0,243 plus opłaty; bufor zwrócony), po wszystkich demo i sprzątaniu 2.522249483 SOL.
+- Demo v2 na devnecie, 28 transakcji `finalized` (linki w README): `demo:flow`, `demo:ghost` (refund_if_late wywołany przez trzeci portfel `cranker`), `demo:dispute` (spalone 38,3% przy ugodzie), `demo:cancel`, `demo:revision`. Umowy z demo:flow, demo:revision i pierwsza próba demo:ghost zamknięto jednorazowo (`close_escrow`), więc devnet nie trzyma rentu po demo.
+- **FRONT MUSI PRZEJŚĆ NA NOWY IDL**: zmieniły się argumenty `create`, konta w `reject`, `cancel_by_freelancer`, `claim_if_silent`, `refund_if_late`, `close_escrow` oraz doszły instrukcje `accept_job`, `withdraw`, `request_revision` i stan `Accepted`. Dopóki `app/` używa starego IDL, jego transakcje na devnecie będą odrzucane (stary `create` ma 5 argumentów, nowy 8). Pełna lista zmian w wiadomości "IDL gotowy" na końcu zadania i w `front.md`.
+- Jawne ograniczenia v2: `freeze_authority` minta nie blokuje `create`; mint Token-2022 z rozszerzeniem spoza białej listy jest odrzucany.
+
 ## Zadanie 6: cancel_by_freelancer (2026-10-04)
 - Program: `cancel_by_freelancer` (wykonawca, Funded/Delivered/Frozen, cała zawartość skarbca → klient bez burn, czyści propozycję, stan Refunded); layout konta bez zmian. `anchor test`: 40 zielonych (33 + 7 nowych). Front: przycisk dla wykonawcy z potwierdzeniem w UI, etykieta „Rezygnacja wykonawcy” w historii, IDL i typy w `app/src/idl/` bajt w bajt z buildem; `tsc` i `vite build` czyste.
 - Devnet = main (commit `c454642`): `solana program extend` o 12 120 B (konto 311 976 → 324 096 B, `.so` 322 048 B), upgrade w slocie 507167004, authority bez zmian (NIE odebrane). `solana program dump` vs `target/deploy/escrow.so`: pierwsze 322 048 B identyczne, reszta to zera. Brak osieroconych buforów.
