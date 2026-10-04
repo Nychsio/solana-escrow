@@ -1350,6 +1350,29 @@ describe("escrow", () => {
       assert.equal(await bal(freelancerToken), freelancerBefore);
     });
 
+    it("cancel from Accepted before the deadline returns the freelancer's bond", async () => {
+      const { escrow } = await open(LONG, 3600, 3600, AMOUNT, withBond);
+      const clientBefore = await bal(clientToken);
+      const freelancerBefore = await bal(freelancerToken);
+      await cancel(escrow);
+      assert.equal(await bal(clientToken), clientBefore + AMOUNT.toNumber());
+      assert.equal(await bal(freelancerToken), freelancerBefore + BOND);
+      assert.equal(await balance(vaultOf(escrow)), "0");
+    });
+
+    it("cancel from Accepted after the deadline forfeits the bond to the client", async () => {
+      const { escrow, deadlineTs } = await open(4, 3600, 3600, AMOUNT, withBond);
+      await waitUntilAfter(deadlineTs);
+      const clientBefore = await bal(clientToken);
+      const freelancerBefore = await bal(freelancerToken);
+      await cancel(escrow);
+      // Abandonment: the client gets the whole vault, the same as refund_if_late.
+      assert.equal(await bal(clientToken), clientBefore + AMOUNT.toNumber() + BOND);
+      assert.equal(await bal(freelancerToken), freelancerBefore);
+      assert.equal(await balance(vaultOf(escrow)), "0");
+      assert.deepEqual(await stateOf(escrow), { refunded: {} });
+    });
+
     it("cancel from Delivered returns each side exactly its own deposit", async () => {
       const { escrow } = await open(LONG, 3600, 3600, AMOUNT, withBond);
       await markDelivered(escrow);

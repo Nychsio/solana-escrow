@@ -242,7 +242,9 @@ pub fn withdraw(ctx: Context<Withdraw>) -> Result<()> {
 
 /// Freelancer unwinds the deal, no burn: they get their own bond back (if they paid
 /// one, i.e. the job was accepted) and the client gets the rest of the vault. Only the
-/// signer gives anything up, so it needs no time conditions.
+/// signer gives anything up. The one time rule: walking away from an accepted job
+/// after the deadline is abandonment, so the bond goes to the client (the same
+/// outcome as refund_if_late), otherwise quitting late would cost nothing.
 pub fn cancel_by_freelancer(ctx: Context<CancelByFreelancer>) -> Result<()> {
     let escrow = &mut ctx.accounts.escrow;
     escrow.require_state(&[
@@ -252,8 +254,10 @@ pub fn cancel_by_freelancer(ctx: Context<CancelByFreelancer>) -> Result<()> {
         EscrowState::Frozen,
     ])?;
     let vault_amount = ctx.accounts.vault.amount;
+    let now = Clock::get()?.unix_timestamp;
     let freelancer_bond_paid = escrow.state != EscrowState::Funded;
-    let freelancer_amount = if freelancer_bond_paid {
+    let abandoned = escrow.state == EscrowState::Accepted && now > escrow.deadline_ts;
+    let freelancer_amount = if freelancer_bond_paid && !abandoned {
         escrow.bond_amount.min(vault_amount)
     } else {
         0
