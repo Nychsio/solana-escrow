@@ -4,7 +4,11 @@ import { txUrl } from "./config";
 import { translateError } from "./errors";
 
 type Toast = { id: number; ok: boolean; info?: boolean; label: string; sig?: string; msg?: string };
-type Ctx = { busy: boolean; run: (label: string, fn: () => Promise<string>) => Promise<string | null> };
+type Ctx = {
+  busy: boolean;
+  run: (label: string, fn: () => Promise<string>) => Promise<string | null>;
+  notify: (t: { ok: boolean; label: string }) => void;
+};
 
 const TxCtx = createContext<Ctx>(null as never);
 export const useTx = () => useContext(TxCtx);
@@ -55,7 +59,7 @@ export function TxProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <TxCtx.Provider value={{ busy, run }}>
+    <TxCtx.Provider value={{ busy, run, notify: (t) => push(t) }}>
       {children}
       <div className="toasts">
         {toasts.map((t) => (

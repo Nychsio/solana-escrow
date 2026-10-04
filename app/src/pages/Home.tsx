@@ -55,13 +55,13 @@ export function Home() {
     <div className="page">
       <Hero
         overline="Escrow bez arbitra"
-        lead={publicKey ? "Umowy, w których jesteś klientem albo wykonawcą." : "Połącz portfel (Phantom/Solflare ustawiony na devnet), żeby zobaczyć swoje umowy."}
+        lead={publicKey ? "Umowy, w których jesteś zleceniodawcą albo zleceniobiorcą." : "Połącz portfel (Phantom/Solflare ustawiony na devnet), żeby zobaczyć swoje umowy."}
         meta={
           publicKey && (
             <>
               <div className="tabs">
-                <button className={tab === "client" ? "on" : ""} disabled={tab === "client"} onClick={() => setTab("client")}>Jako klient</button>
-                <button className={tab === "freelancer" ? "on" : ""} disabled={tab === "freelancer"} onClick={() => setTab("freelancer")}>Jako wykonawca</button>
+                <button className={tab === "client" ? "on" : ""} disabled={tab === "client"} onClick={() => setTab("client")}>Jako zleceniodawca</button>
+                <button className={tab === "freelancer" ? "on" : ""} disabled={tab === "freelancer"} onClick={() => setTab("freelancer")}>Jako zleceniobiorca</button>
               </div>
               <button onClick={() => load()}>Odśwież</button>
               <a href="#/new"><button className="primary"><Plus size={18} weight="bold" />Nowa umowa<ArrowRight size={18} weight="bold" /></button></a>
@@ -71,6 +71,7 @@ export function Home() {
       >
         Twoje umowy
       </Hero>
+      <div className="wrap content">
       {publicKey &&
         (rows === null ? (
           <p>Ładowanie…</p>
@@ -87,7 +88,7 @@ export function Home() {
                   <div className="row-mid">
                     <span className={`state s-${st}`}>{STATE_PL[st]}</span>
                     <div className="muted">
-                      {tab === "client" ? "Wykonawca" : "Klient"}{" "}
+                      {tab === "client" ? "Zleceniobiorca" : "Zleceniodawca"}{" "}
                       <Addr value={(tab === "client" ? esc.freelancer : esc.client).toBase58()} />
                     </div>
                     {d && <div className="muted">Najbliższy termin: <span className="mono">{countdown(d - now)}</span></div>}
@@ -107,6 +108,7 @@ export function Home() {
           <button onClick={() => (location.hash = `#/escrow/${addr.trim()}`)} disabled={!addr.trim()}>Otwórz</button>
         </div>
       </Card>
+      </div>
     </div>
   );
 }

@@ -5,7 +5,6 @@ import {
   ArrowsClockwise,
   Briefcase,
   Clock,
-  Copy,
   Fingerprint,
   Fire,
   Handshake,
@@ -24,7 +23,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Actions } from "../components/Actions";
 import { Addr } from "../components/Addr";
 import { Delivery } from "../components/Delivery";
-import { Card, CopyIcon, Hero, useCopy } from "../components/ui";
+import { Card, CopyIcon, Hero, ShareLinkCard } from "../components/ui";
 import { txUrl } from "../config";
 import { countdown, fmtDate, fromBase, toHex } from "../format";
 import { stateOf, useChainNow, useProgram, vaultOf, type EscrowAccount, type StateName } from "../program";
@@ -32,7 +31,7 @@ import { stateOf, useChainNow, useProgram, vaultOf, type EscrowAccount, type Sta
 type HistItem = { sig: string; ok: boolean; time: number | null; ix: string; closes: boolean };
 
 // Friendlier names for instructions whose log name alone is unclear.
-const IX_LABELS: Record<string, string> = { CancelByFreelancer: "Rezygnacja wykonawcy (CancelByFreelancer)" };
+const IX_LABELS: Record<string, string> = { CancelByFreelancer: "Rezygnacja zleceniobiorcy (CancelByFreelancer)" };
 
 export type EscrowView = {
   pda: PublicKey;
@@ -90,16 +89,6 @@ function History({ items, onRefresh }: { items: HistItem[]; onRefresh: () => voi
       </ul>
       <button onClick={onRefresh}><ArrowsClockwise size={18} weight="duotone" />Odśwież</button>
     </Card>
-  );
-}
-
-function CopyLink() {
-  const { copied, copy } = useCopy(location.href);
-  return (
-    <button className="pill-link" onClick={copy}>
-      <Copy size={18} weight="duotone" />
-      {copied ? "Skopiowano" : "Skopiuj link dla drugiej strony"}
-    </button>
   );
 }
 
@@ -224,11 +213,13 @@ export function EscrowPage({ address }: { address: string }) {
   if (closed)
     return (
       <div className="page">
-        <Hero overline="Umowa escrow" lead="Rent zwrócony klientowi." meta={<Addr value={pda.toBase58()} />}>
+        <Hero overline="Umowa escrow" lead="Rent zwrócony zleceniodawcy." meta={<Addr value={pda.toBase58()} />}>
           Umowa zamknięta
         </Hero>
-        <p><a href="#/" className="back"><ArrowLeft size={18} weight="duotone" />Lista umów</a></p>
-        <History items={history} onRefresh={() => loadHistory()} />
+        <div className="wrap content">
+          <p><a href="#/" className="back"><ArrowLeft size={18} weight="duotone" />Lista umów</a></p>
+          <History items={history} onRefresh={() => loadHistory()} />
+        </div>
       </div>
     );
   if (error)
@@ -256,15 +247,15 @@ export function EscrowPage({ address }: { address: string }) {
   const view: EscrowView = { pda, esc, now, role, reload, vaultBal };
 
   const lead = {
-    funded: now <= deadline ? "Środki są w skarbcu. Czekamy na dostawę od wykonawcy." : "Termin dostawy minął. Klient może odzyskać środki.",
-    delivered: reviewEnd && now <= reviewEnd ? "Dostawa zgłoszona. Klient ma czas na akceptację albo odrzucenie." : "Okno akceptacji minęło. Wykonawca może odebrać wypłatę.",
-    released: "Wypłacono wykonawcy. Umowa zakończona.",
-    refunded: "Środki wróciły do klienta. Umowa zakończona.",
+    funded: now <= deadline ? "Środki są w skarbcu. Czekamy na dostawę od zleceniobiorcy." : "Termin dostawy minął. Zleceniodawca może odzyskać środki.",
+    delivered: reviewEnd && now <= reviewEnd ? "Dostawa zgłoszona. Zleceniodawca ma czas na akceptację albo odrzucenie." : "Okno akceptacji minęło. Zleceniobiorca może odebrać wypłatę.",
+    released: "Wypłacono zleceniobiorcy. Umowa zakończona.",
+    refunded: "Środki wróciły do zleceniodawcy. Umowa zakończona.",
     frozen: disputeEnd && now > disputeEnd ? "Okno sporu minęło. Każdy może spalić środki." : "Dostawa odrzucona. Strony mogą się dogadać przed końcem okna sporu.",
     settled: "Strony dogadały się. Skarbiec został podzielony.",
     burned: "Brak ugody. Środki zostały spalone.",
   }[state];
-  const roleLabel = role === "client" ? "klient" : role === "freelancer" ? "wykonawca" : "obserwator";
+  const roleLabel = role === "client" ? "zleceniodawca" : role === "freelancer" ? "zleceniobiorca" : "obserwator";
   const RoleIcon = role === "freelancer" ? Briefcase : User;
 
   const done = (s: StateName) => BEFORE[state].includes(s) && (s !== "delivered" || !!esc.deliveredAt);
@@ -279,22 +270,24 @@ export function EscrowPage({ address }: { address: string }) {
           <>
             <span className={`state big s-${state}`}><SI size={20} weight="duotone" />{STATE_PL[state]}</span>
             <span className="role"><RoleIcon size={18} weight="duotone" />{roleLabel}</span>
-            <CopyLink />
           </>
         }
+        after={
+          <ol className="path" aria-label="Stan umowy">
+            {STATES.map((s) => (
+              <li key={s} className={s === state ? "current" : done(s) ? "past" : "future"}>
+                <span className="dot" />
+                {STATE_PL[s]}
+              </li>
+            ))}
+          </ol>
+        }
+        float={<ShareLinkCard title={role === "client" ? "Wyślij ten link zleceniobiorcy" : "Link do tej umowy"} />}
       >
         {fromBase(esc.amount)} tokenów
       </Hero>
 
-      <ol className="path" aria-label="Stan umowy">
-        {STATES.map((s) => (
-          <li key={s} className={s === state ? "current" : done(s) ? "past" : "future"}>
-            <span className="dot" />
-            {STATE_PL[s]}
-          </li>
-        ))}
-      </ol>
-
+      <div className="wrap content">
       <div className="grid">
         <div className="col-main">
           <Actions {...view} />
@@ -304,8 +297,8 @@ export function EscrowPage({ address }: { address: string }) {
         <aside className="col-side">
           <Card icon={Archive} title="Szczegóły">
             <dl className="defs">
-              <Def icon={User} label="Klient"><Addr value={esc.client.toBase58()} /></Def>
-              <Def icon={Briefcase} label="Wykonawca"><Addr value={esc.freelancer.toBase58()} /></Def>
+              <Def icon={User} label="Zleceniodawca"><Addr value={esc.client.toBase58()} /></Def>
+              <Def icon={Briefcase} label="Zleceniobiorca"><Addr value={esc.freelancer.toBase58()} /></Def>
               <Def label="Token"><Addr value={esc.mint.toBase58()} /></Def>
               <Def icon={Vault} label="Skarbiec">
                 <span className="mono big-num">{vaultBal ?? "?"}</span>{" "}
@@ -340,6 +333,7 @@ export function EscrowPage({ address }: { address: string }) {
             />
           </Card>
         </aside>
+      </div>
       </div>
     </div>
   );

@@ -8,7 +8,7 @@ import {
   Prohibit,
   Scales,
   SealCheck,
-  SignOut,
+  UserMinus,
   Wallet,
 } from "@phosphor-icons/react";
 import {
@@ -90,7 +90,7 @@ export function Actions({ pda, esc, now, role, reload, vaultBal }: EscrowView) {
     );
   const cancel = async () => {
     setConfirmingCancel(false);
-    await exec("Rezygnacja wykonawcy (cancel_by_freelancer)", () =>
+    await exec("Rezygnacja zleceniobiorcy (cancel_by_freelancer)", () =>
       program.methods
         .cancelByFreelancer()
         .accountsPartial({ freelancer: publicKey, escrow: pda, mint, vault, clientToken, tokenProgram: TOKEN_PROGRAM_ID })
@@ -110,11 +110,11 @@ export function Actions({ pda, esc, now, role, reload, vaultBal }: EscrowView) {
     );
   };
   const propose = () =>
-    exec(`Propozycja ugody: ${pct}% dla wykonawcy`, () =>
+    exec(`Propozycja ugody: ${pct}% dla zleceniobiorcy`, () =>
       program.methods.proposeSettlement(pct * 100).accountsPartial({ signer: publicKey, escrow: pda }).rpc()
     );
   const accept = () =>
-    exec(`Przyjęcie ugody: ${esc.settleBps / 100}% dla wykonawcy`, () =>
+    exec(`Przyjęcie ugody: ${esc.settleBps / 100}% dla zleceniobiorcy`, () =>
       program.methods
         // The accepted bps must equal the stored one, so a last-second swap of the proposal fails.
         .acceptSettlement(esc.settleBps)
@@ -137,17 +137,17 @@ export function Actions({ pda, esc, now, role, reload, vaultBal }: EscrowView) {
   const items: React.ReactNode[] = [];
   const finished = state === "released" || state === "refunded" || state === "settled" || state === "burned";
   if (finished && isClient && vaultBal === "0")
-    items.push(<Act key="cl" kind="primary" icon={Archive} label="Zamknij umowę i odzyskaj rent" caption="close_escrow · podpisuje klient" onClick={close} />);
+    items.push(<Act key="cl" kind="primary" icon={Archive} label="Zamknij umowę i odzyskaj rent" caption="close_escrow · podpisuje zleceniodawca" onClick={close} />);
   if (state === "funded") {
-    if (isClient && now <= deadline) items.push(<Act key="r" kind="primary" icon={SealCheck} label="Zatwierdź i wypłać" caption="release · podpisuje klient" onClick={release} />);
-    if (isClient && now > deadline) items.push(<Act key="rf" kind="primary" icon={ArrowCounterClockwise} label="Odzyskaj środki" caption="refund_if_late · podpisuje klient" onClick={refund} />);
+    if (isClient && now <= deadline) items.push(<Act key="r" kind="primary" icon={SealCheck} label="Zatwierdź i wypłać" caption="release · podpisuje zleceniodawca" onClick={release} />);
+    if (isClient && now > deadline) items.push(<Act key="rf" kind="primary" icon={ArrowCounterClockwise} label="Odzyskaj środki" caption="refund_if_late · podpisuje zleceniodawca" onClick={refund} />);
     if (isFreelancer && now > deadline) items.push(<p key="m">Termin dostawy minął.</p>);
   }
   if (state === "delivered") {
-    if (isClient) items.push(<Act key="r" kind="primary" icon={SealCheck} label="Zatwierdź i wypłać" caption="release · podpisuje klient" onClick={release} />);
-    if (isClient && now <= reviewEnd) items.push(<Act key="rj" kind="danger" icon={Prohibit} label="Odrzuć dostawę" caption="reject · podpisuje klient" onClick={reject} />);
-    if (isFreelancer && now <= reviewEnd) items.push(<p key="m">Czekasz na decyzję klienta do końca okna akceptacji.</p>);
-    if (isFreelancer && now > reviewEnd) items.push(<Act key="c" kind="primary" icon={Lightning} label="Odbierz wypłatę" caption="claim_if_silent · podpisuje wykonawca" onClick={claim} />);
+    if (isClient) items.push(<Act key="r" kind="primary" icon={SealCheck} label="Zatwierdź i wypłać" caption="release · podpisuje zleceniodawca" onClick={release} />);
+    if (isClient && now <= reviewEnd) items.push(<Act key="rj" kind="danger" icon={Prohibit} label="Odrzuć dostawę" caption="reject · podpisuje zleceniodawca" onClick={reject} />);
+    if (isFreelancer && now <= reviewEnd) items.push(<p key="m">Czekasz na decyzję zleceniodawcy do końca okna akceptacji.</p>);
+    if (isFreelancer && now > reviewEnd) items.push(<Act key="c" kind="primary" icon={Lightning} label="Odbierz wypłatę" caption="claim_if_silent · podpisuje zleceniobiorca" onClick={claim} />);
   }
 
   // The freelancer can always hand the whole vault back (no burn); only they lose, so no time rule.
@@ -155,14 +155,14 @@ export function Actions({ pda, esc, now, role, reload, vaultBal }: EscrowView) {
     items.push(
       confirmingCancel ? (
         <div key="cancel" className="card-2">
-          <p>Klient dostanie 100% środków, ty 0. Nieodwracalne.</p>
+          <p>Zleceniodawca dostanie 100% środków, ty 0. Nieodwracalne.</p>
           <div className="row">
             <button className="danger" onClick={cancel}>Potwierdzam rezygnację</button>
             <button onClick={() => setConfirmingCancel(false)}>Anuluj</button>
           </div>
         </div>
       ) : (
-        <Act key="cancel" kind="danger" icon={SignOut} label="Zrezygnuj i zwróć środki klientowi" caption="cancel_by_freelancer · podpisuje wykonawca" onClick={() => setConfirmingCancel(true)} />
+        <Act key="cancel" kind="danger" icon={UserMinus} label="Zrezygnuj i zwróć środki zleceniodawcy" caption="cancel_by_freelancer · podpisuje zleceniobiorca" onClick={() => setConfirmingCancel(true)} />
       )
     );
   }
@@ -173,7 +173,7 @@ export function Actions({ pda, esc, now, role, reload, vaultBal }: EscrowView) {
     const myCode = isClient ? SETTLE_CLIENT : isFreelancer ? SETTLE_FREELANCER : 0;
     const share = (bps: number) => {
       const f = esc.amount.muln(bps).divn(10000);
-      return `wykonawca ${fromBase(f)} / klient ${fromBase(esc.amount.sub(f))}`;
+      return `zleceniobiorca ${fromBase(f)} / zleceniodawca ${fromBase(esc.amount.sub(f))}`;
     };
     // Preview only (same formula as the program): burn = vault * elapsed / dispute_window,
     // elapsed clamped to the window. While Frozen the vault holds the full amount.
@@ -189,21 +189,21 @@ export function Actions({ pda, esc, now, role, reload, vaultBal }: EscrowView) {
           Aktualna propozycja:{" "}
           {proposer === 0
             ? "brak"
-            : `${proposer === SETTLE_CLIENT ? "klient" : "wykonawca"} proponuje ${esc.settleBps / 100}% dla wykonawcy (${share(esc.settleBps)})`}
+            : `${proposer === SETTLE_CLIENT ? "zleceniodawca" : "zleceniobiorca"} proponuje ${esc.settleBps / 100}% dla zleceniobiorcy (${share(esc.settleBps)})`}
         </p>
         {!expired ? (
           <>
             <p>
               Przy akceptacji teraz spalisz {((elapsed / win) * 100).toFixed(1)}% skarbca ({fromBase(burned)}).
-              {proposer !== 0 && <> Wykonawca dostanie {fromBase(fl)}, klient {fromBase(rest.sub(fl))}.</>} Ostateczny rachunek liczy program.
+              {proposer !== 0 && <> Zleceniobiorca dostanie {fromBase(fl)}, zleceniodawca {fromBase(rest.sub(fl))}.</>} Ostateczny rachunek liczy program.
             </p>
             {role && (
               <div className="slider">
                 <label>
-                  Udział wykonawcy: <b>{pct}%</b> <span className="muted">({share(pct * 100)})</span>
+                  Udział zleceniobiorcy: <b>{pct}%</b> <span className="muted">({share(pct * 100)})</span>
                   <input type="range" min={0} max={100} value={pct} onChange={(e) => setPct(Number(e.target.value))} />
                 </label>
-                <Act kind="primary" icon={Handshake} label="Zaproponuj ugodę" caption="propose_settlement · podpisuje klient lub wykonawca" disabled={busy} onClick={propose} />
+                <Act kind="primary" icon={Handshake} label="Zaproponuj ugodę" caption="propose_settlement · podpisuje zleceniodawca lub zleceniobiorca" disabled={busy} onClick={propose} />
               </div>
             )}
             {role && proposer !== 0 && proposer !== myCode && (

@@ -94,14 +94,14 @@ export function Delivery({ pda, esc, now, role, reload }: EscrowView) {
               <p>
                 {hash.label}: <code className="hash">{toHex(hash.h)}</code>
               </p>
-              <Act kind="primary" icon={UploadSimple} label="Zgłoś dostawę" caption="mark_delivered · podpisuje wykonawca" disabled={busy} onClick={deliver} />
+              <Act kind="primary" icon={UploadSimple} label="Zgłoś dostawę" caption="mark_delivered · podpisuje zleceniobiorca" disabled={busy} onClick={deliver} />
             </div>
           )}
         </Card>
       )}
       {hasHash && (
         <Card icon={Fingerprint} title="Weryfikacja dostawy">
-          <p>Wrzuć plik otrzymany od wykonawcy — porównamy jego hash z zapisanym on-chain.</p>
+          <p>Wrzuć plik otrzymany od zleceniobiorcy — porównamy jego hash z zapisanym on-chain.</p>
           <HashInput onHash={(h, label) => h && setCheck({ ok: toHex(h) === onChain, hex: toHex(h), label })} />
           {check && (
             <div className="hash-result">

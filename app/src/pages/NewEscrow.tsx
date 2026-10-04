@@ -63,7 +63,7 @@ export function NewEscrow() {
   if (!publicKey)
     return (
       <div className="page">
-        <Hero overline="Umowa escrow" lead="Połącz portfel klienta, żeby utworzyć umowę.">Nowa umowa</Hero>
+        <Hero overline="Umowa escrow" lead="Połącz portfel zleceniodawcy, żeby utworzyć umowę.">Nowa umowa</Hero>
       </div>
     );
 
@@ -79,7 +79,7 @@ export function NewEscrow() {
     }
     const deadlineTs = Math.floor(new Date(deadline).getTime() / 1000);
     if (deadlineTs <= now) return setFormError("Termin musi być w przyszłości.");
-    if (freelancerPk.equals(publicKey)) return setFormError("Wykonawca musi być innym portfelem niż klient.");
+    if (freelancerPk.equals(publicKey)) return setFormError("Zleceniobiorca musi być innym portfelem niż zleceniodawca.");
 
     // id = timestamp in ms: unique per client, becomes part of the PDA seeds.
     const id = new BN(Date.now());
@@ -106,9 +106,10 @@ export function NewEscrow() {
   return (
     <div className="page">
       <Hero overline="Umowa escrow" lead="Wpłacasz kwotę do skarbca. Wypłaty pilnuje program, nie platforma.">Nowa umowa</Hero>
+      <div className="wrap content">
       <Card icon={Plus} title="Warunki umowy">
         <div className="fields">
-          <label className="field">Adres wykonawcy
+          <label className="field">Adres zleceniobiorcy
             <input value={freelancer} onChange={(e) => setFreelancer(e.target.value)} />
           </label>
           <label className="field">Token (mint)
@@ -146,9 +147,10 @@ export function NewEscrow() {
           <button className="primary" disabled={busy} onClick={submit}>
             <Plus size={18} weight="bold" />{busy ? "Wysyłanie…" : "Utwórz i wpłać do skarbca"}<ArrowRight size={18} weight="bold" />
           </button>
-          <span className="cap">create · podpisuje klient</span>
+          <span className="cap">create · podpisuje zleceniodawca</span>
         </div>
       </Card>
+      </div>
     </div>
   );
 }

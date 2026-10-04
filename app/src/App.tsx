@@ -46,7 +46,7 @@ export default function App() {
                 <WalletMultiButton startIcon={<Wallet size={18} weight="duotone" />} />
               </div>
             </header>
-            <main className="wrap">
+            <main>
               <Router />
             </main>
             <footer>
