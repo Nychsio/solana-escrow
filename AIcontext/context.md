@@ -116,3 +116,5 @@ Ustawienia, które działają: RPC Helius w `app/.env` (VITE_RPC_URL, poza gitem
 - 8A (2026-10-04): UI w nazewnictwie zleceniodawca/zleceniobiorca, karta z linkiem do umowy (kopiowanie z fallbackiem), jasny hero dla kontrastu. 8B (UI escrow v2) czeka na bramkę: commit backendu v2 i potwierdzenie, że devnet to v2.
 
 - Front pod v2.1 (2026-10-04, commit 0010e7c): IDL v2.1, Accepted, kaucja, accept_job (warunki z renderu), ustąpienie z Frozen, cranki dla każdego portfela. Do przeklikania na devnecie: patrz lista ścieżek w odpowiedzi do Piotra.
+
+- Front pod v2.2 (2026-10-04, commit a1e4ab0): zapieczętowana dostawa po stronie przeglądarki (seal.ts), stan Approved, claim_with_key, refund_unrevealed, Odszyfruj pracę. Round-trip szyfrowania sprawdzony w Chrome i Node; transakcje v2.2 do przeklikania na devnecie.
